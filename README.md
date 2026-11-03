@@ -4,6 +4,27 @@ A battle-worn knight who stands watch on your desktop. Only the figure is visibl
 
 Built with Tauri 2, React and TypeScript. Runs fully offline.
 
+## Installing (Windows)
+
+Instructions to build the installer. You'll need the tools under [Development](#development).
+
+```sh
+npm install
+npm run tauri build
+```
+
+Then run `src-tauri/target/release/bundle/nsis/Sentinel_0.1.0_x64-setup.exe`:
+
+- **The installer:** it installs for your user only, needs no admin rights, and adds Sentinel to the Start menu.
+- **No warning:** Windows doesn't warn about the unsigned installer, because you built it yourself and didn't download it.
+- **MSI:** the build also writes an `.msi` to `bundle/msi/`. You don't need it.
+- **Without installing:** `src-tauri/target/release/sentinel.exe` runs on its own, because the app is self-contained and Windows 11 already includes WebView2.
+- **Updating:** rebuild and run the new installer over the old one. Your settings are kept.
+- **Starting with Windows:** press Win+R, enter `shell:startup`, and put a shortcut to Sentinel in the folder that opens.
+- **Uninstalling:** Settings → Apps → Installed apps → Sentinel. Your settings stay in `%APPDATA%\dev.sentinel.app\` unless you tick the uninstaller's option to delete the app data. Delete any Startup shortcut you made yourself.
+
+On Linux, the same build writes `.deb`, `.rpm` and AppImage packages under `bundle/`. Linux is untested; see [Platform notes](#platform-notes).
+
 ## Using him
 
 | Action | How |
@@ -35,15 +56,26 @@ If a saved position is no longer on any screen (a monitor was unplugged, or the 
 
 ## Development
 
-Prerequisites: Node 20+, Rust (stable), and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS.
+Prerequisites: Node 20.19+, 22.12+ or 24+ (not 21 or 23; CI uses 26), [rustup](https://rustup.rs/), and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS. The Rust version is pinned in `rust-toolchain.toml`; install it with `rustup toolchain install`.
 
 ```sh
 npm install
-npm run tauri dev      # run
+npm start              # run a development build (see below)
 npm test               # quote picker and wheel-step tests (Vitest)
 cd src-tauri && cargo test   # pixel scaling, geometry, hit mask, settings tests
 npm run tauri build    # installers in src-tauri/target/release/bundle
 ```
+
+### Development build and installed app
+
+`npm start` runs `tauri dev` with `src-tauri/tauri.dev.conf.json`, which gives the development build its own identifier (`dev.sentinel.app.dev`). As a result:
+
+- **It runs alongside an installed knight.** Each has its own single-instance lock, so starting one never just summons the other.
+- **It keeps its own settings** in `%APPDATA%\dev.sentinel.app.dev\` (`~/.config/dev.sentinel.app.dev/` on Linux). Moving or resizing the dev knight leaves your everyday one alone.
+- **Its tray tooltip says "Sentinel (dev)".**
+- **Only one of them gets `Ctrl+Alt+K`**: whichever started first. The other works from its tray icon and right-click menu, and doesn't get the shortcut until it restarts, even after the first one exits. To give the dev knight its own shortcut, set `"shortcut"` in its `settings.json` (see [Settings](#settings)).
+
+Don't use plain `npm run tauri dev`. It runs with the installed app's identity, so while the installed knight is running it only summons him and exits.
 
 Other docs:
 

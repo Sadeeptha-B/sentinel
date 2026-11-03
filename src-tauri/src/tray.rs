@@ -42,7 +42,12 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     )?;
 
     let mut tray = TrayIconBuilder::with_id("sentinel")
-        .tooltip(format!("Sentinel · {} summons the knight", s.shortcut))
+        // "(dev)" tells a development build's tray icon apart from the installed one.
+        .tooltip(format!(
+            "Sentinel{} · {} summons the knight",
+            if cfg!(debug_assertions) { " (dev)" } else { "" },
+            s.shortcut
+        ))
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_tray_icon_event(|tray, event| {
