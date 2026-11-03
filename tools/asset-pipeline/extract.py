@@ -125,8 +125,7 @@ def main() -> None:
     icon_source(full).save(OUT / "icon-source.png")
 
     bits, mw, mh = hit_mask(alpha)
-    (ASSETS / "knight.hitmask.bin").write_bytes(bits)
-    # Rust embeds the mask; keep a copy beside the crate sources too.
+    # Rust embeds the mask and metadata for hit-testing and sizing.
     rust_assets = ROOT / "src-tauri" / "assets"
     if rust_assets.parent.exists():
         rust_assets.mkdir(exist_ok=True)

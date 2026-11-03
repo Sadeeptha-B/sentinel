@@ -9,7 +9,7 @@ use std::{
     path::PathBuf,
     sync::{
         Mutex,
-        atomic::{AtomicBool, AtomicU64},
+        atomic::{AtomicBool, AtomicIsize, AtomicU64},
     },
     time::{Duration, Instant},
 };
@@ -18,7 +18,6 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, RunEvent, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
-use knight::Rect;
 use settings::Settings;
 
 const SAVE_DELAY: Duration = Duration::from_millis(500);
@@ -27,8 +26,9 @@ pub struct AppState {
     pub settings: Mutex<Settings>,
     path: PathBuf,
     dirty: Mutex<Option<Instant>>,
-    /// The knight window's outer rect, physical px, kept current from window events.
-    pub rect: Mutex<Rect>,
+    /// The knight window's native handle (Windows), for reading its geometry from any
+    /// thread without a round trip through the event loop. Zero when unknown.
+    pub hwnd: AtomicIsize,
     /// Last click-through state applied to the knight window.
     pub ignoring: Mutex<Option<bool>>,
     /// The page has painted, so the window may be shown.
@@ -44,7 +44,7 @@ impl AppState {
             settings: Mutex::new(settings),
             path,
             dirty: Mutex::new(None),
-            rect: Mutex::default(),
+            hwnd: AtomicIsize::new(0),
             ignoring: Mutex::new(None),
             revealed: AtomicBool::new(false),
             whisper_seq: AtomicU64::new(0),

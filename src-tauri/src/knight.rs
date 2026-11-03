@@ -17,10 +17,14 @@ const MAX_UPSCALE: f64 = 1.15;
 const MAX_SCREEN_SHARE: f64 = 0.9;
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Meta {
     pub height: u32,
     pub aspect: f64,
     pub mask: MaskMeta,
+    /// Horizontal extent of his stance (boots and blade), as fractions of the width.
+    pub feet_left: f64,
+    pub feet_right: f64,
 }
 
 #[derive(Deserialize)]
@@ -125,27 +129,28 @@ pub fn is_opaque(x: f64, y: f64, win_w: f64, win_h: f64) -> bool {
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Side {
-    Left,
-    Right,
+pub enum Placement {
+    /// Just beneath his feet.
+    Below,
+    /// Over the lower half of the figure, when there is no room beneath him.
+    Over,
 }
 
-/// Where the quote window goes: beside his shoulders, on whichever side of the
-/// work area has more room, overlapping the empty margin of his own window.
-pub fn whisper_rect(knight: Rect, work: Rect, w: f64, h: f64) -> (Rect, Side) {
+/// Where the quote window goes: centred on his stance, below his feet when the work
+/// area has room for it, otherwise over the lower half of the figure (as when he
+/// stands on the taskbar).
+pub fn whisper_rect(knight: Rect, work: Rect, w: f64, h: f64) -> (Rect, Placement) {
     let fig_h = knight.h / (1.0 + SHADOW_BAND);
-    let overlap = knight.w * 0.16;
-    let left_room = knight.x + overlap - work.x;
-    let right_room = work.right() - (knight.right() - overlap);
-    let side = if left_room >= w || left_room >= right_room { Side::Left } else { Side::Right };
-    let x = match side {
-        Side::Left => knight.x + overlap - w,
-        Side::Right => knight.right() - overlap,
+    let centre = knight.x + knight.w * (META.feet_left + META.feet_right) / 2.0;
+    let below = knight.y + fig_h * 0.985;
+    let (y, placement) = if below + h <= work.bottom() {
+        (below, Placement::Below)
+    } else {
+        (knight.y + fig_h * 0.72 - h / 2.0, Placement::Over)
     };
-    let y = knight.y + fig_h * 0.17 - h / 2.0;
-    let x = x.clamp(work.x, (work.right() - w).max(work.x));
+    let x = (centre - w / 2.0).clamp(work.x, (work.right() - w).max(work.x));
     let y = y.clamp(work.y, (work.bottom() - h).max(work.y));
-    (Rect::new(x.round(), y.round(), w, h), side)
+    (Rect::new(x.round(), y.round(), w, h), placement)
 }
 
 #[cfg(test)]
@@ -201,15 +206,17 @@ mod tests {
     }
 
     #[test]
-    fn whisper_prefers_the_roomier_side() {
+    fn whisper_goes_below_when_there_is_room_else_over_his_lower_half() {
         let work = Rect::new(0.0, 0.0, 1920.0, 1032.0);
-        let near_right = Rect::new(1650.0, 600.0, 240.0, 412.0);
-        let (r, side) = whisper_rect(near_right, work, 360.0, 160.0);
-        assert_eq!(side, Side::Left);
-        assert!(r.right() <= near_right.x + near_right.w * 0.5);
-        let near_left = Rect::new(10.0, 600.0, 240.0, 412.0);
-        let (r, side) = whisper_rect(near_left, work, 360.0, 160.0);
-        assert_eq!(side, Side::Right);
-        assert!(r.x >= near_left.x + near_left.w * 0.5);
+        let standing_mid = Rect::new(1000.0, 300.0, 240.0, 412.0);
+        let (r, placement) = whisper_rect(standing_mid, work, 420.0, 150.0);
+        assert_eq!(placement, Placement::Below);
+        assert!(r.y >= standing_mid.y + 412.0 / (1.0 + SHADOW_BAND) * 0.98);
+
+        let on_taskbar = default_rect(work, 240.0, 412.0, 24.0);
+        let (r, placement) = whisper_rect(on_taskbar, work, 420.0, 150.0);
+        assert_eq!(placement, Placement::Over);
+        assert!(r.y > on_taskbar.y + on_taskbar.h * 0.4, "lower half");
+        assert!(r.right() <= work.right(), "kept on screen");
     }
 }

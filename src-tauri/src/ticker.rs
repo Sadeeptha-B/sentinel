@@ -56,10 +56,13 @@ fn run(app: AppHandle) {
             continue;
         }
 
-        let rect = *st.rect.lock().unwrap();
-        let near = match app.cursor_position() {
-            Ok(c) if rect.inflate(NEAR_MARGIN).contains(c.x, c.y) => {
-                let opaque = knight::is_opaque(c.x - rect.x, c.y - rect.y, rect.w, rect.h);
+        let Some(rect) = stage::current_rect(&app) else {
+            thread::sleep(FAR_TICK);
+            continue;
+        };
+        let near = match cursor(&app) {
+            Ok((x, y)) if rect.inflate(NEAR_MARGIN).contains(x, y) => {
+                let opaque = knight::is_opaque(x - rect.x, y - rect.y, rect.w, rect.h);
                 stage::set_ignore(&app, !opaque);
                 true
             }
@@ -71,4 +74,18 @@ fn run(app: AppHandle) {
         };
         thread::sleep(if near { NEAR_TICK } else { FAR_TICK });
     }
+}
+
+/// Global cursor position in physical px.
+fn cursor(app: &AppHandle) -> tauri::Result<(f64, f64)> {
+    #[cfg(windows)]
+    {
+        use windows::Win32::{Foundation::POINT, UI::WindowsAndMessaging::GetCursorPos};
+        let mut p = POINT::default();
+        // SAFETY: writes only to the local POINT.
+        if unsafe { GetCursorPos(&mut p) }.is_ok() {
+            return Ok((p.x as f64, p.y as f64));
+        }
+    }
+    app.cursor_position().map(|c| (c.x, c.y))
 }
