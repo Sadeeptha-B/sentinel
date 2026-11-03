@@ -244,13 +244,10 @@ fn place(app: &AppHandle, win: &WebviewWindow, saved: Option<(i32, i32)>, height
         let (r, h) = fitted(screen, x, y, height);
         knight::is_reachable(r, &bounds, REACHABLE_MIN * screen.scale).then_some((r, h))
     });
-    if let Some((r, h)) = restored.or_else(|| default_placement(win, height)) {
+    // `height` stays the user's intended size; only the position is saved here.
+    if let Some((r, _)) = restored.or_else(|| default_placement(win, height)) {
         apply_rect(win, r);
-        update(app, |s| {
-            s.x = Some(r.x as i32);
-            s.y = Some(r.y as i32);
-            s.height = h;
-        });
+        update(app, |s| (s.x, s.y) = (Some(r.x as i32), Some(r.y as i32)));
     }
 }
 
@@ -267,13 +264,9 @@ pub fn reveal(app: &AppHandle) {
 pub fn reset_position(app: &AppHandle) {
     let Some(win) = knight_window(app) else { return };
     let height = settings(app).height;
-    if let Some((r, h)) = default_placement(&win, height) {
+    if let Some((r, _)) = default_placement(&win, height) {
         apply_rect(&win, r);
-        update(app, |s| {
-            s.x = Some(r.x as i32);
-            s.y = Some(r.y as i32);
-            s.height = h;
-        });
+        update(app, |s| (s.x, s.y) = (Some(r.x as i32), Some(r.y as i32)));
     }
 }
 
@@ -306,24 +299,38 @@ pub fn scale_info(app: &AppHandle) -> Option<(u32, f64, f64)> {
     Some((knight::scale_of(current.h), dpi, work_h))
 }
 
-/// Resize to the whole-number scale nearest `height` (logical), feet kept in place.
-pub fn resize_to(app: &AppHandle, height: f64) {
-    let Some(win) = knight_window(app) else { return };
-    let Some(current) = current_rect(app) else { return };
-    let Some((_, dpi, work_h)) = scale_info(app) else { return };
+/// Size the window to the whole-number scale nearest `height` (logical), feet kept in
+/// place. Returns the scale applied and the DPI it was applied at.
+fn fit(app: &AppHandle, height: f64) -> Option<(u32, f64)> {
+    let win = knight_window(app)?;
+    let current = current_rect(app)?;
+    let (_, dpi, work_h) = scale_info(app)?;
     let k = knight::scale_for(height, dpi, work_h);
     let (w, h) = knight::window_px(k);
     let next = knight::anchored_resize(current, w, h);
     if next != current {
         apply_rect(&win, next);
     }
-    update(app, |s| s.height = knight::height_for(k, dpi));
+    Some((k, dpi))
 }
 
-/// Re-snap to the whole-number scale for his saved size on the current display.
+/// The user chose a size: apply it and remember it as his intended size. Refused, with
+/// a word from him, while his position is locked.
+pub fn resize_to(app: &AppHandle, height: f64) {
+    if settings(app).locked {
+        hold_ground(app);
+        return;
+    }
+    if let Some((k, dpi)) = fit(app, height) {
+        update(app, |s| s.height = knight::height_for(k, dpi));
+    }
+}
+
+/// Re-snap to the whole-number scale for his intended size on the current display,
+/// leaving that intended size untouched (so crossing displays never drifts it).
 pub fn refit(app: &AppHandle) {
     let height = settings(app).height;
-    resize_to(app, height);
+    fit(app, height);
 }
 
 /// Grow (`steps` > 0) or shrink by whole pixel-scale steps.
@@ -331,6 +338,24 @@ pub fn resize_step(app: &AppHandle, steps: i32) {
     let Some((k, dpi, _)) = scale_info(app) else { return };
     let target = (k as i32 + steps).max(knight::MIN_SCALE as i32) as u32;
     resize_to(app, knight::height_for(target, dpi));
+}
+
+const HOLD_LINE: &str = "I hold this ground.";
+
+/// Someone tried to move or resize him while locked: say so, once per showing.
+pub fn hold_ground(app: &AppHandle) {
+    let st = state(app);
+    let showing = st.whisper_shown.load(Ordering::Relaxed)
+        && st.hold_seq.load(Ordering::Relaxed) == st.whisper_seq.load(Ordering::Relaxed);
+    if !showing {
+        say_hold(app);
+    }
+}
+
+fn say_hold(app: &AppHandle) {
+    if let Some(seq) = whisper(app, Some(HOLD_LINE)) {
+        state(app).hold_seq.store(seq, Ordering::Relaxed);
+    }
 }
 
 pub fn set_visible(app: &AppHandle, visible: bool) {
@@ -361,6 +386,11 @@ pub fn set_always_on_top(app: &AppHandle, on: bool) {
 
 pub fn set_locked(app: &AppHandle, on: bool) {
     update(app, |s| s.locked = on);
+    if on {
+        say_hold(app);
+    } else {
+        whisper(app, Some("I am free to move."));
+    }
 }
 
 pub fn set_passive(app: &AppHandle, on: bool) {
@@ -389,34 +419,39 @@ pub fn summon(app: &AppHandle) {
 }
 
 /// Let clicks pass through the knight's window (`true`) or catch them (`false`).
+///
+/// The cached state and the native call change together on the main thread only, so
+/// requests from the ticker and the menu can't land out of order and leave the cache
+/// claiming a state the window doesn't have. Off the main thread the cache is only a
+/// hint to skip posting a no-op.
 pub fn set_ignore(app: &AppHandle, ignore: bool) {
-    let st = state(app);
-    {
-        let mut current = st.ignoring.lock().unwrap();
-        if *current == Some(ignore) {
+    if *state(app).ignoring.lock().unwrap() == Some(ignore) {
+        return;
+    }
+    let handle = app.clone();
+    // Runs inline when already on the main thread.
+    let _ = app.run_on_main_thread(move || {
+        let st = state(&handle);
+        if *st.ignoring.lock().unwrap() == Some(ignore) {
             return;
         }
-        *current = Some(ignore);
-    }
-    let applied = knight_window(app).is_some_and(|w| w.set_ignore_cursor_events(ignore).is_ok());
-    if !applied {
-        *st.ignoring.lock().unwrap() = None;
-    }
+        let applied =
+            knight_window(&handle).is_some_and(|w| w.set_ignore_cursor_events(ignore).is_ok());
+        *st.ignoring.lock().unwrap() = applied.then_some(ignore);
+    });
 }
 
 /// Show a line by him: `Some(text)` verbatim, or `None` for a quote of the
-/// whisper window's choosing.
-pub fn whisper(app: &AppHandle, text: Option<&str>) {
-    let (Some(knight), Some(whisper)) = (knight_window(app), app.get_webview_window(WHISPER))
-    else {
-        return;
-    };
+/// whisper window's choosing. Returns the line's sequence number if it was shown.
+pub fn whisper(app: &AppHandle, text: Option<&str>) -> Option<u64> {
+    let knight = knight_window(app)?;
+    let whisper = app.get_webview_window(WHISPER)?;
     let s = settings(app);
     if !s.visible {
-        return;
+        return None;
     }
     let st = state(app);
-    let Some(rect) = current_rect(app) else { return };
+    let rect = current_rect(app)?;
     let scale = dpi(app).unwrap_or(1.0);
     let work = screen_for(&knight, rect).map_or(rect, |s| s.work);
     let (r, placement) =
@@ -436,6 +471,7 @@ pub fn whisper(app: &AppHandle, text: Option<&str>) {
             font_px: (s.height * 0.05).clamp(16.0, 26.0),
         },
     );
+    Some(seq)
 }
 
 /// Clicking the knight lifts him to the top of the always-on-top band; put the quote

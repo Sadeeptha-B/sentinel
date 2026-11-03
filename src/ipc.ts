@@ -12,6 +12,8 @@ export const uiState = () => invoke<UiState>("ui_state");
 export const requestQuote = () => invoke<void>("request_quote");
 export const resizeStep = (steps: number) => invoke<void>("resize_step", { steps });
 export const openContextMenu = () => invoke<void>("open_context_menu");
+/** He was dragged while locked; Rust answers with a word from him. */
+export const holdGround = () => invoke<void>("hold_ground");
 export const whisperDone = (seq: number) => invoke<void>("whisper_done", { seq });
 
 export const onUiState = (cb: (s: UiState) => void): Promise<UnlistenFn> =>

@@ -39,13 +39,13 @@ export function Knight() {
   }, []);
 
   // Ctrl+wheel and Ctrl +/- resize in whole pixel-scale steps, at most one request
-  // per frame.
+  // per frame. Rust refuses them while he's locked, and tells the user so.
   useEffect(() => {
     let wheel = 0;
     let pending = 0;
     let frame = 0;
     const step = (n: number) => {
-      if (locked.current || n === 0) return;
+      if (n === 0) return;
       pending += n;
       frame ||= requestAnimationFrame(() => {
         frame = 0;
@@ -103,7 +103,8 @@ export function Knight() {
     if (!p || !(e.buttons & 1)) return;
     if (Math.hypot(e.screenX - p.x, e.screenY - p.y) < DRAG_THRESHOLD) return;
     press.current = null;
-    if (!locked.current) void getCurrentWindow().startDragging();
+    if (locked.current) void ipc.holdGround();
+    else void getCurrentWindow().startDragging();
   };
 
   const onPointerUp = (e: PointerEvent) => {

@@ -41,7 +41,8 @@ pub fn popup(app: &AppHandle) -> tauri::Result<()> {
                 none,
             )?,
             &PredefinedMenuItem::separator(app)?,
-            &Submenu::with_id_and_items(app, "size", "Size", true, &size_refs)?,
+            // Locked means no resizing either.
+            &Submenu::with_id_and_items(app, "size", "Size", !s.locked, &size_refs)?,
             &CheckMenuItem::with_id(app, "lock", "Lock Position", true, s.locked, none)?,
             &CheckMenuItem::with_id(app, "top", "Always on Top", true, s.always_on_top, none)?,
             &CheckMenuItem::with_id(app, "passive", "Passive (click-through)", true, s.passive, none)?,
@@ -59,7 +60,9 @@ pub fn popup(app: &AppHandle) -> tauri::Result<()> {
 pub fn handle(app: &AppHandle, id: &str) {
     let s = app.state::<AppState>().settings.lock().unwrap().clone();
     match id {
-        "quote" => stage::whisper(app, None),
+        "quote" => {
+            stage::whisper(app, None);
+        }
         "watch" => stage::set_stand_watch(app, !s.stand_watch),
         "lock" => stage::set_locked(app, !s.locked),
         "top" => stage::set_always_on_top(app, !s.always_on_top),

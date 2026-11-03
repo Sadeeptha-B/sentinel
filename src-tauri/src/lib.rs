@@ -11,7 +11,6 @@ use std::{
         Mutex,
         atomic::{AtomicBool, AtomicIsize, AtomicU64},
     },
-    time::{Duration, Instant},
 };
 
 use serde::Serialize;
@@ -20,12 +19,9 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use settings::Settings;
 
-const SAVE_DELAY: Duration = Duration::from_millis(500);
-
 pub struct AppState {
     pub settings: Mutex<Settings>,
-    path: PathBuf,
-    dirty: Mutex<Option<Instant>>,
+    saver: settings::Saver,
     /// The knight window's native handle (Windows), for reading its geometry from any
     /// thread without a round trip through the event loop. Zero when unknown.
     pub hwnd: AtomicIsize,
@@ -35,6 +31,9 @@ pub struct AppState {
     pub revealed: AtomicBool,
     pub whisper_seq: AtomicU64,
     pub whisper_shown: AtomicBool,
+    /// Sequence number of the last "I hold this ground." line, so a locked knight
+    /// doesn't repeat it while it is still showing.
+    pub hold_seq: AtomicU64,
     pub tray: Mutex<Option<tray::TrayItems>>,
 }
 
@@ -42,36 +41,27 @@ impl AppState {
     fn new(settings: Settings, path: PathBuf) -> Self {
         Self {
             settings: Mutex::new(settings),
-            path,
-            dirty: Mutex::new(None),
+            saver: settings::Saver::new(path),
             hwnd: AtomicIsize::new(0),
             ignoring: Mutex::new(None),
             revealed: AtomicBool::new(false),
             whisper_seq: AtomicU64::new(0),
             whisper_shown: AtomicBool::new(false),
+            hold_seq: AtomicU64::new(0),
             tray: Mutex::new(None),
         }
     }
 
     pub fn mark_dirty(&self) {
-        *self.dirty.lock().unwrap() = Some(Instant::now());
+        self.saver.mark_dirty();
     }
 
     pub fn flush_if_due(&self) {
-        let due = matches!(*self.dirty.lock().unwrap(), Some(t) if t.elapsed() >= SAVE_DELAY);
-        if due {
-            self.flush();
-        }
+        self.saver.flush_if_due(&self.settings);
     }
 
     pub fn flush(&self) {
-        if self.dirty.lock().unwrap().take().is_none() {
-            return;
-        }
-        let snapshot = self.settings.lock().unwrap().clone();
-        if let Err(e) = settings::save(&self.path, &snapshot) {
-            eprintln!("sentinel: could not save settings to {}: {e}", self.path.display());
-        }
+        self.saver.flush(&self.settings);
     }
 }
 
@@ -117,6 +107,12 @@ fn open_context_menu(app: AppHandle) -> Result<(), String> {
     menu::popup(&app).map_err(|e| e.to_string())
 }
 
+/// He was dragged while his position is locked.
+#[tauri::command]
+fn hold_ground(app: AppHandle) {
+    stage::hold_ground(&app);
+}
+
 #[tauri::command]
 fn whisper_done(app: AppHandle, seq: u64) {
     stage::whisper_done(&app, seq);
@@ -152,6 +148,7 @@ pub fn run() {
             request_quote,
             resize_step,
             open_context_menu,
+            hold_ground,
             whisper_done
         ])
         .setup(|app| {
