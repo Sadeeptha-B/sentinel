@@ -4,6 +4,8 @@
 
 Run all of these before every commit. All of them must pass, and clippy must report no warnings.
 
+CI (`.github/workflows/ci.yml`) runs the same checks on every pull request and on every push to `main`, on Windows and on Linux, with clippy at `-D warnings`. `main` is protected, so both jobs must pass before merging. The Rust version is pinned in `rust-toolchain.toml` so that local builds and CI agree.
+
 ```sh
 npm test                                     # Vitest: quote picker, wheel steps
 npx tsc --noEmit -p .
@@ -53,7 +55,7 @@ Unit tests can't see transparency, DPI changes, click-through or the tray, so ch
   3. Confirm the window is `58k × 96k` on each side, with `k` switching between 4 (100%) and 5 (125%) at the default size.
   4. Confirm his size is the same after the round trip.
 - **Installers:** run `npm run tauri build`, install, and check the first-launch default (bottom-right, 4× at 100%).
-- **Linux:** X11 and Wayland (GNOME and KDE). Record the actual behaviour in the README's platform notes.
+- **Linux:** X11 and Wayland (GNOME and KDE). CI only shows that it builds and passes the unit tests there; nobody has run the app. Record the actual behaviour in the README's platform notes.
 
 ### How to run live checks
 
