@@ -110,22 +110,52 @@ pub fn figure_height(win_h: f64) -> f64 {
     win_h * META.height as f64 / window_rows() as f64
 }
 
-/// Resize `outer` to `w`×`h` keeping the bottom-centre — his feet — where it was.
+/// The line his boots stand on, as a share of the window's height: the bottom edge of
+/// the lowest opaque mask row. The shadow band and any padding lie below it.
+static FEET_LINE: LazyLock<f64> = LazyLock::new(|| {
+    let m = &META.mask;
+    let lowest = (0..m.height).rev().find(|&y| (0..m.width).any(|x| mask_bit(x, y))).unwrap_or(m.height - 1);
+    (lowest + 1) as f64 / window_rows() as f64
+});
+
+/// Resize `outer` to `w`×`h` keeping his feet (the centre of the line he stands on)
+/// where they were.
 pub fn anchored_resize(outer: Rect, w: f64, h: f64) -> Rect {
+    let feet = *FEET_LINE;
     Rect::new(
         (outer.x + outer.w / 2.0 - w / 2.0).round(),
-        (outer.bottom() - h).round(),
+        (outer.y + outer.h * feet - h * feet).round(),
         w,
         h,
     )
 }
 
-/// A window is reachable when a `min`×`min` part of it lies on some screen.
+/// Area (physical px²) of the figure itself, not its transparent surroundings, that
+/// lies on some screen.
+fn visible_figure_area(win: Rect, screens: &[Rect]) -> f64 {
+    let m = &META.mask;
+    let (pw, ph) = (win.w / m.width as f64, figure_height(win.h) / m.height as f64);
+    let shown = (0..m.height)
+        .flat_map(|y| (0..m.width).map(move |x| (x, y)))
+        .filter(|&(x, y)| mask_bit(x, y))
+        .filter(|&(x, y)| {
+            let (cx, cy) = (win.x + (x as f64 + 0.5) * pw, win.y + (y as f64 + 0.5) * ph);
+            screens.iter().any(|s| s.contains(cx, cy))
+        })
+        .count();
+    shown as f64 * pw * ph
+}
+
+/// He is reachable when at least `min`×`min` px of the figure itself is on screen
+/// (or all of it, if he is smaller than that). Transparent window corners don't count.
 pub fn is_reachable(win: Rect, screens: &[Rect], min: f64) -> bool {
-    screens.iter().any(|s| {
-        let (w, h) = win.overlap(s);
-        w >= min.min(win.w) && h >= min.min(win.h)
-    })
+    let whole = visible_figure_area(win, &[win]);
+    visible_figure_area(win, screens) >= (min * min).min(whole)
+}
+
+fn mask_bit(x: usize, y: usize) -> bool {
+    let row_bytes = META.mask.width.div_ceil(8);
+    MASK.get(y * row_bytes + x / 8).is_some_and(|byte| byte >> (x % 8) & 1 == 1)
 }
 
 /// Default spot: bottom-right of the work area, shadow resting on the taskbar edge.
@@ -148,9 +178,7 @@ pub fn is_opaque(x: f64, y: f64, win_w: f64, win_h: f64) -> bool {
     let m = &META.mask;
     let mx = ((x / win_w) * m.width as f64) as usize;
     let my = ((y / fig_h) * m.height as f64) as usize;
-    let row_bytes = m.width.div_ceil(8);
-    MASK.get(my.min(m.height - 1) * row_bytes + mx.min(m.width - 1) / 8)
-        .is_some_and(|byte| byte >> (mx.min(m.width - 1) % 8) & 1 == 1)
+    mask_bit(mx.min(m.width - 1), my.min(m.height - 1))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
@@ -185,24 +213,47 @@ mod tests {
 
     const SCREEN: Rect = Rect { x: 0.0, y: 0.0, w: 1920.0, h: 1080.0 };
 
-    #[test]
-    fn anchored_resize_keeps_feet_in_place() {
-        let r = Rect::new(1000.0, 500.0, 240.0, 412.0);
-        let grown = anchored_resize(r, 300.0, 515.0);
-        assert_eq!(grown.bottom(), r.bottom());
-        assert_eq!(grown.x + grown.w / 2.0, r.x + r.w / 2.0);
+    /// Screen y of the bottom edge of his lowest opaque pixel, read from the real mask.
+    fn boots(r: Rect) -> f64 {
+        let k = r.h / window_rows() as f64;
+        let lowest = (0..META.height as usize)
+            .rev()
+            .find(|&y| (0..META.width as usize).any(|x| mask_bit(x, y)))
+            .unwrap();
+        r.y + (lowest + 1) as f64 * k
     }
 
     #[test]
-    fn reachability_requires_a_meaningful_chunk_on_screen() {
-        let on = Rect::new(1700.0, 600.0, 240.0, 412.0);
-        let sliver = Rect::new(1900.0, 600.0, 240.0, 412.0);
-        let gone = Rect::new(4000.0, 600.0, 240.0, 412.0);
+    fn anchored_resize_keeps_feet_in_place() {
+        let (w4, h4) = window_px(4);
+        let r = Rect::new(1000.0, 400.0, w4, h4);
+        for k in [MIN_SCALE, 3, 5, 6] {
+            let (w, h) = window_px(k);
+            let next = anchored_resize(r, w, h);
+            assert_eq!(boots(next), boots(r), "k 4 -> {k}");
+            assert_eq!(next.x + next.w / 2.0, r.x + r.w / 2.0);
+        }
+    }
+
+    #[test]
+    fn reachability_requires_a_meaningful_chunk_of_him_on_screen() {
+        let (w, h) = window_px(4);
+        let on = Rect::new(1700.0, 600.0, w, h);
+        let sliver = Rect::new(1900.0, 600.0, w, h);
+        let gone = Rect::new(4000.0, 600.0, w, h);
         assert!(is_reachable(on, &[SCREEN], 64.0));
         assert!(!is_reachable(sliver, &[SCREEN], 64.0));
         assert!(!is_reachable(gone, &[SCREEN], 64.0));
         let second = Rect::new(1920.0, 0.0, 1920.0, 1080.0);
         assert!(is_reachable(sliver, &[SCREEN, second], 64.0));
+    }
+
+    #[test]
+    fn transparent_corner_on_screen_is_not_reachable() {
+        // Only the window's empty top-left 64×64 corner is on the screen.
+        let (w, h) = window_px(5);
+        let corner = Rect::new(SCREEN.right() - 64.0, SCREEN.bottom() - 64.0, w, h);
+        assert!(!is_reachable(corner, &[SCREEN], 64.0));
     }
 
     #[test]
