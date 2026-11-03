@@ -45,6 +45,12 @@ cd src-tauri && cargo test   # pixel scaling, geometry, hit mask, settings tests
 npm run tauri build    # installers in src-tauri/target/release/bundle
 ```
 
+Other docs:
+
+- [`docs/TESTING.md`](docs/TESTING.md): every check, plus the live checks on Windows.
+- [`docs/DECISIONS.md`](docs/DECISIONS.md): the owner's decisions.
+- [`AGENTS.md`](AGENTS.md): conventions and invariants for anyone (or any agent) changing the code.
+
 ### Layout
 
 - `src-tauri/src/stage.rs`: windows, placement, feet-anchored resizing, toggles, recovery.
