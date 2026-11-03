@@ -1,0 +1,5 @@
+rembg[cpu]
+pymatting
+pillow
+numpy
+opencv-python-headless

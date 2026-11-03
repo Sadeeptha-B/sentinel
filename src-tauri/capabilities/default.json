@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Knight and whisper windows: events, plus dragging the knight.",
+  "windows": ["knight", "whisper"],
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
+}
