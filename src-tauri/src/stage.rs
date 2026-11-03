@@ -14,14 +14,14 @@ use tauri::{
 
 use crate::{
     AppState, UiState,
-    knight::{self, Rect, Side},
+    knight::{self, Placement, Rect},
     settings::Settings,
 };
 
 pub const KNIGHT: &str = "knight";
 pub const WHISPER: &str = "whisper";
 /// Logical size of the quote window.
-const WHISPER_SIZE: (f64, f64) = (360.0, 170.0);
+const WHISPER_SIZE: (f64, f64) = (420.0, 150.0);
 /// Logical gap between the default spot and the screen's right edge.
 const MARGIN: f64 = 24.0;
 /// Logical size of the part of him that must stay on some screen.
@@ -56,7 +56,7 @@ struct WhisperPayload {
     seq: u64,
     /// `None` asks the whisper window to choose a quote itself.
     text: Option<String>,
-    side: Side,
+    placement: Placement,
     font_px: f64,
 }
 
@@ -111,9 +111,27 @@ fn default_placement(win: &WebviewWindow, height: f64) -> Option<(Rect, f64)> {
     Some((knight::default_rect(screen.work, r.w, r.h, MARGIN * screen.scale), height))
 }
 
+/// The knight window's actual outer rect in physical px.
+pub fn current_rect(app: &AppHandle) -> Option<Rect> {
+    #[cfg(windows)]
+    {
+        use windows::Win32::{
+            Foundation::{HWND, RECT},
+            UI::WindowsAndMessaging::GetWindowRect,
+        };
+        let raw = state(app).hwnd.load(Ordering::Relaxed);
+        let mut r = RECT::default();
+        // SAFETY: GetWindowRect only reads; a stale handle simply fails.
+        if raw != 0 && unsafe { GetWindowRect(HWND(raw as *mut _), &mut r) }.is_ok() {
+            let (w, h) = ((r.right - r.left) as f64, (r.bottom - r.top) as f64);
+            return Some(Rect::new(r.left as f64, r.top as f64, w, h));
+        }
+    }
+    outer_rect(&knight_window(app)?)
+}
+
 /// Move and resize in one step so his feet never visibly jump.
-fn apply_rect(app: &AppHandle, win: &WebviewWindow, r: Rect) {
-    *state(app).rect.lock().unwrap() = r;
+fn apply_rect(win: &WebviewWindow, r: Rect) {
     #[cfg(windows)]
     if let Ok(hwnd) = win.hwnd() {
         use windows::Win32::UI::WindowsAndMessaging::{
@@ -185,6 +203,8 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         .visible(false)
         .build()?;
     whisper.set_ignore_cursor_events(true)?;
+    #[cfg(windows)]
+    state(app).hwnd.store(knight.hwnd()?.0 as isize, Ordering::Relaxed);
 
     place(app, &knight, s.x.zip(s.y), s.height);
     if s.passive {
@@ -207,7 +227,7 @@ fn place(app: &AppHandle, win: &WebviewWindow, saved: Option<(i32, i32)>, height
         knight::is_reachable(r, &bounds, REACHABLE_MIN * screen.scale).then_some((r, h))
     });
     if let Some((r, h)) = restored.or_else(|| default_placement(win, height)) {
-        apply_rect(app, win, r);
+        apply_rect(win, r);
         update(app, |s| {
             s.x = Some(r.x as i32);
             s.y = Some(r.y as i32);
@@ -230,7 +250,7 @@ pub fn reset_position(app: &AppHandle) {
     let Some(win) = knight_window(app) else { return };
     let height = settings(app).height;
     if let Some((r, h)) = default_placement(&win, height) {
-        apply_rect(app, &win, r);
+        apply_rect(&win, r);
         update(app, |s| {
             s.x = Some(r.x as i32);
             s.y = Some(r.y as i32);
@@ -241,8 +261,7 @@ pub fn reset_position(app: &AppHandle) {
 
 /// Snap him back if a display change or bad coordinates left him out of reach.
 pub fn ensure_reachable(app: &AppHandle) {
-    let Some(win) = knight_window(app) else { return };
-    let r = *state(app).rect.lock().unwrap();
+    let (Some(win), Some(r)) = (knight_window(app), current_rect(app)) else { return };
     let all = screens(&win);
     if all.is_empty() {
         return; // Monitor enumeration failed; don't guess.
@@ -254,16 +273,21 @@ pub fn ensure_reachable(app: &AppHandle) {
     }
 }
 
+fn outer_rect(win: &WebviewWindow) -> Option<Rect> {
+    let (p, s) = (win.outer_position().ok()?, win.outer_size().ok()?);
+    Some(Rect::new(p.x as f64, p.y as f64, s.width as f64, s.height as f64))
+}
+
 pub fn resize_to(app: &AppHandle, height: f64) {
     let Some(win) = knight_window(app) else { return };
-    let current = *state(app).rect.lock().unwrap();
+    let Some(current) = current_rect(app) else { return };
     let scale = win.scale_factor().unwrap_or(1.0);
     let work_h = screen_for(&win, current).map_or(1080.0, |s| s.work.h / s.scale);
     let height = knight::clamp_height(height, scale, work_h);
     let (w, h) = knight::window_size(height);
     let next = knight::anchored_resize(current, (w * scale).round(), (h * scale).round());
     if next != current {
-        apply_rect(app, &win, next);
+        apply_rect(&win, next);
     }
     update(app, |s| s.height = height);
 }
@@ -344,7 +368,7 @@ pub fn set_ignore(app: &AppHandle, ignore: bool) {
     }
 }
 
-/// Show a line beside him: `Some(text)` verbatim, or `None` for a quote of the
+/// Show a line by him: `Some(text)` verbatim, or `None` for a quote of the
 /// whisper window's choosing.
 pub fn whisper(app: &AppHandle, text: Option<&str>) {
     let (Some(knight), Some(whisper)) = (knight_window(app), app.get_webview_window(WHISPER))
@@ -356,25 +380,43 @@ pub fn whisper(app: &AppHandle, text: Option<&str>) {
         return;
     }
     let st = state(app);
-    let rect = *st.rect.lock().unwrap();
+    let Some(rect) = current_rect(app) else { return };
     let scale = knight.scale_factor().unwrap_or(1.0);
     let work = screen_for(&knight, rect).map_or(rect, |s| s.work);
-    let (r, side) =
+    let (r, placement) =
         knight::whisper_rect(rect, work, WHISPER_SIZE.0 * scale, WHISPER_SIZE.1 * scale);
     let _ = whisper.set_position(PhysicalPosition::new(r.x as i32, r.y as i32));
     let seq = st.whisper_seq.fetch_add(1, Ordering::Relaxed) + 1;
     st.whisper_shown.store(true, Ordering::Relaxed);
     let _ = whisper.show();
+    raise_above_knight(&whisper);
     let _ = app.emit_to(
         WHISPER,
         "sentinel://whisper",
         WhisperPayload {
             seq,
             text: text.map(str::to_owned),
-            side,
-            font_px: (s.height * 0.046).clamp(15.0, 24.0),
+            placement,
+            font_px: (s.height * 0.05).clamp(16.0, 26.0),
         },
     );
+}
+
+/// Clicking the knight lifts him to the top of the always-on-top band; put the quote
+/// back above him so his armour never hides the words.
+fn raise_above_knight(whisper: &WebviewWindow) {
+    #[cfg(windows)]
+    if let Ok(hwnd) = whisper.hwnd() {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
+        };
+        // SAFETY: hwnd belongs to a live window owned by this process.
+        let _ = unsafe {
+            SetWindowPos(hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+        };
+        return;
+    }
+    let _ = whisper.set_always_on_top(true);
 }
 
 /// The whisper window finished fading line `seq`; hide it unless a newer one began.
@@ -406,20 +448,12 @@ pub fn on_window_event(win: &Window, event: &WindowEvent) {
     match event {
         WindowEvent::Moved(p) => {
             {
-                let mut r = st.rect.lock().unwrap();
-                (r.x, r.y) = (p.x as f64, p.y as f64);
-            }
-            {
                 let mut s = st.settings.lock().unwrap();
                 (s.x, s.y) = (Some(p.x), Some(p.y));
             }
             st.mark_dirty();
-            // A quote left hanging beside his old spot looks detached.
+            // A quote left hanging at his old spot looks detached.
             hide_whisper(app);
-        }
-        WindowEvent::Resized(size) => {
-            let mut r = st.rect.lock().unwrap();
-            (r.w, r.h) = (size.width as f64, size.height as f64);
         }
         WindowEvent::ScaleFactorChanged { .. } => {
             // Re-fit to the new DPI once Windows has finished its own resize.

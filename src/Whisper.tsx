@@ -84,7 +84,7 @@ function WhisperLine({ line, onGone }: { line: Line; onGone: (seq: number) => vo
   }, [line.leaving, line.seq, onGone]);
 
   return (
-    <p ref={ref} className={`whisper ${line.side}`} style={{ fontSize: `${line.fontPx}px` }}>
+    <p ref={ref} className={`whisper ${line.placement}`} style={{ fontSize: `${line.fontPx}px` }}>
       {line.text}
     </p>
   );

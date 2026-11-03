@@ -3,9 +3,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export type UiState = { locked: boolean; passive: boolean; standWatch: boolean };
-export type Side = "left" | "right";
+export type Placement = "below" | "over";
 /** `text: null` means "pick a quote yourself". */
-export type WhisperRequest = { seq: number; text: string | null; side: Side; fontPx: number };
+export type WhisperRequest = { seq: number; text: string | null; placement: Placement; fontPx: number };
 
 export const knightReady = () => invoke<void>("knight_ready");
 export const uiState = () => invoke<UiState>("ui_state");

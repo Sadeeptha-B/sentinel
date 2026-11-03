@@ -1,0 +1,103 @@
+# Sentinel
+
+A battle-worn knight who stands watch on your desktop. Only the figure is visible: there's no window frame, background or toolbar. He stays quietly above your other windows and says a few words only when you ask.
+
+Built with Tauri 2, React and TypeScript. Runs fully offline.
+
+## Using him
+
+| Action | How |
+| --- | --- |
+| Hear a few words | Click him |
+| Move him | Drag him |
+| Resize him (feet stay planted) | `Ctrl` + mouse wheel over him, `Ctrl` `+` / `Ctrl` `-`, or right-click → Size |
+| Menu | Right-click him: Show Quote · Stand Watch / Stand Down · Size · Lock Position · Always on Top · Passive · Hide · Exit |
+| Hide / show | Left-click the tray icon, or tray menu → Hide/Show Sentinel |
+| Summon him | `Ctrl+Alt+K` shows him, ends Passive mode and brings him back on screen |
+
+- **Click-through.** Clicks only land on the knight himself. Transparent pixels around him pass clicks to the window underneath.
+- **Passive mode** makes him fully click-through. Undo it from the tray menu or with `Ctrl+Alt+K`.
+- **Quotes** appear beneath his feet when there's room, otherwise over his lower half (for example while he stands on the taskbar). They fade in, then fade out on their own. Nothing appears unless you ask.
+- **Stand Watch** is symbolic only. There are no timers and nothing is tracked.
+
+### Settings
+
+Position, size, visibility, always-on-top, lock, passive and Stand Watch persist across restarts in `settings.json`:
+
+- Windows: `%APPDATA%\dev.sentinel.app\`
+- Linux: `~/.config/dev.sentinel.app/`
+
+To change the summon shortcut, edit `"shortcut"` there (for example `"Ctrl+Shift+F12"`) and restart.
+
+If a saved position is no longer on any screen (a monitor was unplugged, or the resolution changed), he returns to the bottom-right corner of the primary screen. The app checks this at launch and every few seconds after. Tray → **Reset Position** does the same on demand.
+
+## Development
+
+Prerequisites: Node 20+, Rust (stable), and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS.
+
+```sh
+npm install
+npm run tauri dev      # run
+npm test               # quote picker tests (Vitest)
+cd src-tauri && cargo test   # geometry, hit mask, settings tests
+npm run tauri build    # installers in src-tauri/target/release/bundle
+```
+
+### Layout
+
+- `src-tauri/src/stage.rs`: windows, placement, feet-anchored resizing, toggles, recovery.
+- `src-tauri/src/ticker.rs`: silhouette hit-testing, off-screen recovery, debounced saves.
+- `src-tauri/src/knight.rs`: pure geometry and the embedded alpha mask (unit tested).
+- `src-tauri/src/{menu,tray,settings}.rs`: context menu, tray, persistence.
+- `src/Knight.tsx`: the figure, contact shadow, click vs drag, resize input.
+- `src/Whisper.tsx`, `src/quotes.ts`: the quote window and library.
+
+### The knight asset
+
+`tools/asset-pipeline/extract.py` produces the transparent figure from `docs/Battle-Worn Knight Amid Embers.png`. It does four things:
+
+1. Runs **BiRefNet** matting (`probe.py` compares it with ISNet, which bled into the ground).
+2. Keeps the largest connected component, which drops embers and specks.
+3. Decontaminates edge colour with `pymatting.estimate_foreground_ml`, so the dark sky leaves no halo on light wallpapers.
+4. Trims the result.
+
+It writes:
+
+- `src/assets/knight@{full,half}.webp`: lossless, with alpha.
+- `src-tauri/assets/knight.hitmask.bin` and `knight.meta.json`: the hit mask (¼ resolution) and metadata.
+- An icon source, which feeds `npx tauri icon`.
+
+`preview.py` composites the result over white, grey, black and a busy pattern for QA.
+
+```sh
+python -m venv tools/asset-pipeline/.venv
+tools/asset-pipeline/.venv/Scripts/pip install -r tools/asset-pipeline/requirements.txt   # bin/ on Linux
+tools/asset-pipeline/.venv/Scripts/python tools/asset-pipeline/extract.py
+```
+
+**Asset limits:**
+
+- The reference image is 1024×1536, which gives an 853×1415 figure. Display size is capped at about 1.15× the source pixels: roughly 1600 px tall at 100% scaling, or 650 px at 250%. That's well above the 300–520 px sizes the app offers, but he can't be enlarged without limit.
+- The matte is very clean at normal sizes. At large sizes the ragged cloak edges are slightly softer than the armour, because the cloak is dark navy against a dark sky in the source.
+
+## Platform notes
+
+**Windows 10/11.** This is the primary target. On Windows 11, across two monitors at different scaling (100% and 125%), the following were exercised:
+
+- transparency, with no visible rectangle;
+- always-on-top;
+- silhouette click-through, flipping correctly between his body and the transparent pixels around him;
+- the DPI refit when he moves between monitors;
+- click-for-quote, with automatic fade-out.
+
+**Resources (Windows).** Measured idle over 10 s: 0.00% CPU across the whole process tree. Nothing animates while idle, and the background ticker only reads the cursor position (10× per second, 30× while the cursor is near him).
+
+Memory is about 25 MB for `sentinel.exe` and about 130 MB private in total, across 7 processes. Most of that is WebView2 (Chromium) helper processes for the knight and quote windows, which is inherent to Tauri on Windows.
+
+**Linux has not been tested.** Expected behaviour, based on how Tauri, GTK and compositors work:
+
+- **X11.** Transparency needs a running compositor; without one, a black rectangle appears behind him. Always-on-top, click-through, tray and global shortcuts should work.
+- **Wayland.** Apps can't read the global cursor, so silhouette click-through falls back to the whole window rectangle catching clicks. Passive mode still makes him fully click-through. Most compositors also ignore app-requested window positions and may ignore always-on-top, so position persistence and quote placement may not apply. Global shortcuts depend on the compositor's portal support. Running under XWayland (`GDK_BACKEND=x11`) usually restores X11 behaviour.
+- **Tray.** Needs `libayatana-appindicator`. On GNOME it also needs the AppIndicator extension. Without a tray, use `Ctrl+Alt+K` and the right-click menu, and quit with Exit.
+
+**macOS isn't a target.** Transparent windows there would need Tauri's `macos-private-api`.
