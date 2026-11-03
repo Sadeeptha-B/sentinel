@@ -9,8 +9,9 @@
 //!   rather than racing the OS's own resize.
 //! - **Debounced saving** of settings.
 //!
-//! Polls at ~30 Hz only while the cursor is near him, ~10 Hz otherwise. Where the
-//! platform can't report the global cursor (Wayland), the whole window catches clicks.
+//! Polls at ~30 Hz only while the cursor is near him, ~10 Hz otherwise. While the
+//! global cursor can't be read (Wayland; Windows' secure desktop), the whole window
+//! catches clicks and the ticker retries every half second.
 
 use std::{
     thread,
@@ -24,6 +25,8 @@ use crate::{AppState, knight, stage};
 const NEAR_TICK: Duration = Duration::from_millis(33);
 const FAR_TICK: Duration = Duration::from_millis(100);
 const HIDDEN_TICK: Duration = Duration::from_millis(300);
+/// Retry interval while the global cursor can't be read.
+const NO_CURSOR_TICK: Duration = Duration::from_millis(500);
 const REACHABILITY_EVERY: Duration = Duration::from_secs(3);
 /// How long a changed DPI or off-scale size must hold still before he's re-snapped.
 const SNAP_AFTER: Duration = Duration::from_millis(150);
@@ -39,7 +42,6 @@ pub fn spawn(app: AppHandle) {
 
 fn run(app: AppHandle) {
     let mut last_check = Instant::now();
-    let mut cursor_supported = true;
     let mut applied_dpi: Option<f64> = None;
     let mut unsettled: Option<((f64, f64, f64), Instant)> = None;
     loop {
@@ -72,8 +74,8 @@ fn run(app: AppHandle) {
                 _ => Some((now, Instant::now())),
             };
         }
-        if passive || !cursor_supported {
-            stage::set_ignore(&app, passive);
+        if passive {
+            stage::set_ignore(&app, true);
             thread::sleep(FAR_TICK);
             continue;
         }
@@ -82,19 +84,21 @@ fn run(app: AppHandle) {
             thread::sleep(FAR_TICK);
             continue;
         };
-        let near = match cursor(&app) {
+        let tick = match cursor(&app) {
             Ok((x, y)) if rect.inflate(NEAR_MARGIN).contains(x, y) => {
                 let opaque = knight::is_opaque(x - rect.x, y - rect.y, rect.w, rect.h);
                 stage::set_ignore(&app, !opaque);
-                true
+                NEAR_TICK
             }
-            Ok(_) => false,
+            Ok(_) => FAR_TICK,
+            // No global cursor (Wayland), or briefly none (Windows' secure desktop while
+            // locked): the whole window catches clicks, and we keep trying, more slowly.
             Err(_) => {
-                cursor_supported = false;
-                false
+                stage::set_ignore(&app, false);
+                NO_CURSOR_TICK
             }
         };
-        thread::sleep(if near { NEAR_TICK } else { FAR_TICK });
+        thread::sleep(tick);
     }
 }
 
