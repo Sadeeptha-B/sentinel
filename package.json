@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "start": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "dev": "vite",
     "build": "tsc && vite build",
     "test": "vitest run",

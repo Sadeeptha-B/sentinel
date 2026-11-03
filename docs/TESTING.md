@@ -19,7 +19,7 @@ cargo clippy --all-targets --manifest-path src-tauri/Cargo.toml
 
 ## Live checks on Windows
 
-Unit tests can't see transparency, DPI changes, click-through or the tray, so changes in those areas need a live run with `npm run tauri dev`.
+Unit tests can't see transparency, DPI changes, click-through or the tray, so changes in those areas need a live run with `npm start`. That's a development build with its own identity, so it runs alongside an installed knight without touching its settings (README → *Development build and installed app*). The summon shortcut goes to whichever knight started first, so to check `Ctrl+Alt+K` on the dev build, exit the installed knight before running `npm start`.
 
 **Ask the owner before driving their mouse or keyboard, and put the cursor back afterwards.**
 
@@ -54,7 +54,8 @@ Unit tests can't see transparency, DPI changes, click-through or the tray, so ch
   2. Drag him across and back.
   3. Confirm the window is `58k × 96k` on each side, with `k` switching between 4 (100%) and 5 (125%) at the default size.
   4. Confirm his size is the same after the round trip.
-- **Installers:** run `npm run tauri build`, install, and check the first-launch default (bottom-right, 4× at 100%).
+- **Installers:** run `npm run tauri build`, install, and check the first-launch default (bottom-right, 4× at 100%). Also check that the installer runs without a SmartScreen prompt, that `sentinel.exe` runs without installing, that reinstalling keeps settings, and that uninstalling keeps them unless the app-data box is ticked.
+- **Dev build alongside the installed knight:** with the installed knight running, `npm start` brings up a second knight with "Sentinel (dev)" in its tray tooltip and its own settings.
 - **Linux:** X11 and Wayland (GNOME and KDE). CI only shows that it builds and passes the unit tests there; nobody has run the app. Record the actual behaviour in the README's platform notes.
 
 ### How to run live checks
