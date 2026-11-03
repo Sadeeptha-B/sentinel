@@ -10,7 +10,7 @@ export type WhisperRequest = { seq: number; text: string | null; placement: Plac
 export const knightReady = () => invoke<void>("knight_ready");
 export const uiState = () => invoke<UiState>("ui_state");
 export const requestQuote = () => invoke<void>("request_quote");
-export const resizeBy = (factor: number) => invoke<void>("resize_by", { factor });
+export const resizeStep = (steps: number) => invoke<void>("resize_step", { steps });
 export const openContextMenu = () => invoke<void>("open_context_menu");
 export const whisperDone = (seq: number) => invoke<void>("whisper_done", { seq });
 

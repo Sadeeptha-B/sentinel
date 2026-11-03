@@ -6,19 +6,23 @@ use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
 };
 
-use crate::{AppState, stage};
+use crate::{AppState, knight, stage};
 
-const SIZES: [(&str, &str, f64); 3] =
-    [("size:300", "Small", 300.0), ("size:400", "Medium", 400.0), ("size:520", "Large", 520.0)];
+/// Size presets as whole-number pixel scales at 100% display scaling; on other
+/// displays they snap to the scale giving about the same apparent size.
+const SIZES: [(&str, &str, u32); 3] = [("size:3", "Small", 3), ("size:4", "Medium", 4), ("size:5", "Large", 5)];
 
 pub fn popup(app: &AppHandle) -> tauri::Result<()> {
     let s = app.state::<AppState>().settings.lock().unwrap().clone();
     let none = None::<&str>;
 
+    let scale = stage::scale_info(app);
     let sizes = SIZES
         .iter()
-        .map(|(id, label, h)| {
-            let current = (s.height - h).abs() / h < 0.04;
+        .map(|(id, label, n)| {
+            let current = scale.is_some_and(|(k, dpi, work_h)| {
+                knight::scale_for(knight::height_for(*n, 1.0), dpi, work_h) == k
+            });
             CheckMenuItem::with_id(app, *id, *label, true, current, none)
         })
         .collect::<tauri::Result<Vec<_>>>()?;
@@ -68,8 +72,8 @@ pub fn handle(app: &AppHandle, id: &str) {
         }
         "exit" => stage::exit(app),
         _ => {
-            if let Some((_, _, h)) = SIZES.iter().find(|(sid, _, _)| *sid == id) {
-                stage::resize_to(app, *h);
+            if let Some((_, _, n)) = SIZES.iter().find(|(sid, _, _)| *sid == id) {
+                stage::resize_to(app, knight::height_for(*n, 1.0));
             }
         }
     }

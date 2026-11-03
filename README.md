@@ -10,7 +10,7 @@ Built with Tauri 2, React and TypeScript. Runs fully offline.
 | --- | --- |
 | Hear a few words | Click him |
 | Move him | Drag him |
-| Resize him (feet stay planted) | `Ctrl` + mouse wheel over him, `Ctrl` `+` / `Ctrl` `-`, or right-click → Size |
+| Resize him (feet stay planted) | `Ctrl` + mouse wheel over him, `Ctrl` `+` / `Ctrl` `-`, or right-click → Size (Small / Medium / Large) |
 | Menu | Right-click him: Show Quote · Stand Watch / Stand Down · Size · Lock Position · Always on Top · Passive · Hide · Exit |
 | Hide / show | Left-click the tray icon, or tray menu → Hide/Show Sentinel |
 | Summon him | `Ctrl+Alt+K` shows him, ends Passive mode and brings him back on screen |
@@ -19,6 +19,7 @@ Built with Tauri 2, React and TypeScript. Runs fully offline.
 - **Passive mode** makes him fully click-through. Undo it from the tray menu or with `Ctrl+Alt+K`.
 - **Quotes** appear beneath his feet when there's room, otherwise over his lower half (for example while he stands on the taskbar). They fade in, then fade out on their own. Nothing appears unless you ask.
 - **Stand Watch** is symbolic only. There are no timers and nothing is tracked.
+- **Sizes are whole-number pixel scales.** He's pixel art, so each sprite pixel is always drawn as a crisp square block of screen pixels. Resizing steps between scales (Small, Medium and Large are 3×, 4× and 5× at 100% display scaling), and on displays with other scaling he snaps to the scale that gives about the same apparent size.
 
 ### Settings
 
@@ -38,8 +39,8 @@ Prerequisites: Node 20+, Rust (stable), and the [Tauri prerequisites](https://ta
 ```sh
 npm install
 npm run tauri dev      # run
-npm test               # quote picker tests (Vitest)
-cd src-tauri && cargo test   # geometry, hit mask, settings tests
+npm test               # quote picker and wheel-step tests (Vitest)
+cd src-tauri && cargo test   # pixel scaling, geometry, hit mask, settings tests
 npm run tauri build    # installers in src-tauri/target/release/bundle
 ```
 
@@ -47,38 +48,32 @@ npm run tauri build    # installers in src-tauri/target/release/bundle
 
 - `src-tauri/src/stage.rs`: windows, placement, feet-anchored resizing, toggles, recovery.
 - `src-tauri/src/ticker.rs`: silhouette hit-testing, off-screen recovery, debounced saves.
-- `src-tauri/src/knight.rs`: pure geometry and the embedded alpha mask (unit tested).
+- `src-tauri/src/knight.rs`: whole-number pixel scaling, geometry and the embedded hit mask (unit tested).
 - `src-tauri/src/{menu,tray,settings}.rs`: context menu, tray, persistence.
-- `src/Knight.tsx`: the figure, contact shadow, click vs drag, resize input.
+- `src/Knight.tsx`: the sprite, click vs drag, resize input.
 - `src/Whisper.tsx`, `src/quotes.ts`: the quote window and library.
 
-### The knight asset
+### The knight
 
-`tools/asset-pipeline/extract.py` produces the transparent figure from `docs/Battle-Worn Knight Amid Embers.png`. It does four things:
-
-1. Runs **BiRefNet** matting (`probe.py` compares it with ISNet, which bled into the ground).
-2. Keeps the largest connected component, which drops embers and specks.
-3. Decontaminates edge colour with `pymatting.estimate_foreground_ml`, so the dark sky leaves no halo on light wallpapers.
-4. Trims the result.
-
-It writes:
-
-- `src/assets/knight@{full,half}.webp`: lossless, with alpha.
-- `src-tauri/assets/knight.hitmask.bin` and `knight.meta.json`: the hit mask (¼ resolution) and metadata.
-- An icon source, which feeds `npx tauri icon`.
-
-`preview.py` composites the result over white, grey, black and a busy pattern for QA.
+The knight is a hand-authored pixel sprite, designed from the brief: `tools/asset-pipeline/pixel_knight.py` builds him from shapes, shading rules and hand-placed pixels, in two builds (`stocky`, used by the app, and `slim`). Export the app's assets with:
 
 ```sh
 python -m venv tools/asset-pipeline/.venv
 tools/asset-pipeline/.venv/Scripts/pip install -r tools/asset-pipeline/requirements.txt   # bin/ on Linux
-tools/asset-pipeline/.venv/Scripts/python tools/asset-pipeline/extract.py
+tools/asset-pipeline/.venv/Scripts/python tools/asset-pipeline/pixel_knight.py --export stocky
+npx tauri icon tools/asset-pipeline/out/icon-source.png
 ```
 
-**Asset limits:**
+The export writes:
 
-- The reference image is 1024×1536, which gives an 853×1415 figure. Display size is capped at about 1.15× the source pixels: roughly 1600 px tall at 100% scaling, or 650 px at 250%. That's well above the 300–520 px sizes the app offers, but he can't be enlarged without limit.
-- The matte is very clean at normal sizes. At large sizes the ragged cloak edges are slightly softer than the armour, because the cloak is dark navy against a dark sky in the source.
+- `src/assets/knight.png`: the 1× sprite with a baked, pixel-stepped contact shadow in 3 rows below his feet.
+- `src-tauri/assets/knight.hitmask.bin` and `knight.meta.json`: a 1-bit mask of the figure (one bit per sprite pixel, shadow excluded) and his size and stance, for sizing, hit-testing and quote placement.
+- `out/icon-source.png`: the helm and shoulders for the app and tray icons.
+
+**Reference tooling.** The rest of `tools/asset-pipeline/` explored art directions and never touches the app's assets:
+
+- `extract.py` cuts the knight out of `docs/Battle-Worn Knight Amid Embers.png` with BiRefNet matting (`probe.py` compares models) into `out/knight.png`.
+- `styles.py` renders comparison sheets of the painting and the pixel knight's passes (`reference/` holds the earlier v1 and v2 sprites).
 
 ## Platform notes
 

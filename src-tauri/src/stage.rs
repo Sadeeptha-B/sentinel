@@ -97,12 +97,13 @@ fn screen_for(win: &WebviewWindow, r: Rect) -> Option<Screen> {
     best.or_else(|| primary(win))
 }
 
-/// Physical window rect at `pos` for a figure `height` logical px tall on `screen`,
-/// with the height clamped to suit that screen.
+/// Physical window rect at `pos` for a figure about `height` logical px tall on
+/// `screen`, snapped to a whole-number pixel scale that fits; plus the height that
+/// scale actually gives.
 fn fitted(screen: &Screen, x: f64, y: f64, height: f64) -> (Rect, f64) {
-    let height = knight::clamp_height(height, screen.scale, screen.work.h / screen.scale);
-    let (w, h) = knight::window_size(height);
-    (Rect::new(x, y, (w * screen.scale).round(), (h * screen.scale).round()), height)
+    let k = knight::scale_for(height, screen.scale, screen.work.h);
+    let (w, h) = knight::window_px(k);
+    (Rect::new(x, y, w, h), knight::height_for(k, screen.scale))
 }
 
 fn default_placement(win: &WebviewWindow, height: f64) -> Option<(Rect, f64)> {
@@ -128,6 +129,22 @@ pub fn current_rect(app: &AppHandle) -> Option<Rect> {
         }
     }
     outer_rect(&knight_window(app)?)
+}
+
+/// The knight window's DPI scale factor. On Windows it's read from the OS, because the
+/// windowing layer's cached value can lag when the window moves between displays.
+pub fn dpi(app: &AppHandle) -> Option<f64> {
+    #[cfg(windows)]
+    {
+        use windows::Win32::{Foundation::HWND, UI::HiDpi::GetDpiForWindow};
+        let raw = state(app).hwnd.load(Ordering::Relaxed);
+        // SAFETY: GetDpiForWindow only reads; a stale handle returns 0.
+        let dpi = if raw != 0 { unsafe { GetDpiForWindow(HWND(raw as *mut _)) } } else { 0 };
+        if dpi > 0 {
+            return Some(dpi as f64 / 96.0);
+        }
+    }
+    knight_window(app)?.scale_factor().ok()
 }
 
 /// Move and resize in one step so his feet never visibly jump.
@@ -172,7 +189,8 @@ fn update(app: &AppHandle, change: impl FnOnce(&mut Settings)) {
 
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let s = settings(app);
-    let (w, h) = knight::window_size(s.height);
+    // Provisional size; `place` sets the exact pixel-scaled rect before he is shown.
+    let (w, h) = knight::window_px(knight::scale_for(s.height, 1.0, 1080.0));
     let knight = WebviewWindowBuilder::new(app, KNIGHT, WebviewUrl::App("index.html".into()))
         .title("Sentinel")
         .inner_size(w, h)
@@ -266,7 +284,7 @@ pub fn ensure_reachable(app: &AppHandle) {
     if all.is_empty() {
         return; // Monitor enumeration failed; don't guess.
     }
-    let scale = win.scale_factor().unwrap_or(1.0);
+    let scale = dpi(app).unwrap_or(1.0);
     let bounds: Vec<Rect> = all.iter().map(|s| s.bounds).collect();
     if !knight::is_reachable(r, &bounds, REACHABLE_MIN * scale) {
         reset_position(app);
@@ -278,23 +296,41 @@ fn outer_rect(win: &WebviewWindow) -> Option<Rect> {
     Some(Rect::new(p.x as f64, p.y as f64, s.width as f64, s.height as f64))
 }
 
+/// The knight's current whole-number scale, the window's DPI scale factor, and the
+/// height of the work area he stands in (physical px).
+pub fn scale_info(app: &AppHandle) -> Option<(u32, f64, f64)> {
+    let win = knight_window(app)?;
+    let current = current_rect(app)?;
+    let dpi = dpi(app).unwrap_or(1.0);
+    let work_h = screen_for(&win, current).map_or(1080.0 * dpi, |s| s.work.h);
+    Some((knight::scale_of(current.h), dpi, work_h))
+}
+
+/// Resize to the whole-number scale nearest `height` (logical), feet kept in place.
 pub fn resize_to(app: &AppHandle, height: f64) {
     let Some(win) = knight_window(app) else { return };
     let Some(current) = current_rect(app) else { return };
-    let scale = win.scale_factor().unwrap_or(1.0);
-    let work_h = screen_for(&win, current).map_or(1080.0, |s| s.work.h / s.scale);
-    let height = knight::clamp_height(height, scale, work_h);
-    let (w, h) = knight::window_size(height);
-    let next = knight::anchored_resize(current, (w * scale).round(), (h * scale).round());
+    let Some((_, dpi, work_h)) = scale_info(app) else { return };
+    let k = knight::scale_for(height, dpi, work_h);
+    let (w, h) = knight::window_px(k);
+    let next = knight::anchored_resize(current, w, h);
     if next != current {
         apply_rect(&win, next);
     }
-    update(app, |s| s.height = height);
+    update(app, |s| s.height = knight::height_for(k, dpi));
 }
 
-pub fn resize_by(app: &AppHandle, factor: f64) {
+/// Re-snap to the whole-number scale for his saved size on the current display.
+pub fn refit(app: &AppHandle) {
     let height = settings(app).height;
-    resize_to(app, height * factor);
+    resize_to(app, height);
+}
+
+/// Grow (`steps` > 0) or shrink by whole pixel-scale steps.
+pub fn resize_step(app: &AppHandle, steps: i32) {
+    let Some((k, dpi, _)) = scale_info(app) else { return };
+    let target = (k as i32 + steps).max(knight::MIN_SCALE as i32) as u32;
+    resize_to(app, knight::height_for(target, dpi));
 }
 
 pub fn set_visible(app: &AppHandle, visible: bool) {
@@ -381,7 +417,7 @@ pub fn whisper(app: &AppHandle, text: Option<&str>) {
     }
     let st = state(app);
     let Some(rect) = current_rect(app) else { return };
-    let scale = knight.scale_factor().unwrap_or(1.0);
+    let scale = dpi(app).unwrap_or(1.0);
     let work = screen_for(&knight, rect).map_or(rect, |s| s.work);
     let (r, placement) =
         knight::whisper_rect(rect, work, WHISPER_SIZE.0 * scale, WHISPER_SIZE.1 * scale);
@@ -455,14 +491,8 @@ pub fn on_window_event(win: &Window, event: &WindowEvent) {
             // A quote left hanging at his old spot looks detached.
             hide_whisper(app);
         }
-        WindowEvent::ScaleFactorChanged { .. } => {
-            // Re-fit to the new DPI once Windows has finished its own resize.
-            let app = app.clone();
-            let _ = app.clone().run_on_main_thread(move || {
-                let height = settings(&app).height;
-                resize_to(&app, height);
-            });
-        }
+        // A scale-factor change is handled by the ticker: Windows resizes the window
+        // itself after this event, so a refit here would be overwritten.
         WindowEvent::CloseRequested { .. } => exit(app),
         _ => {}
     }
