@@ -106,9 +106,9 @@ fn request_quote(app: AppHandle) {
 }
 
 #[tauri::command]
-fn resize_by(app: AppHandle, factor: f64) {
-    if factor.is_finite() && factor > 0.0 {
-        stage::resize_by(&app, factor);
+fn resize_step(app: AppHandle, steps: i32) {
+    if steps != 0 {
+        stage::resize_step(&app, steps.clamp(-8, 8));
     }
 }
 
@@ -150,7 +150,7 @@ pub fn run() {
             knight_ready,
             ui_state,
             request_quote,
-            resize_by,
+            resize_step,
             open_context_menu,
             whisper_done
         ])

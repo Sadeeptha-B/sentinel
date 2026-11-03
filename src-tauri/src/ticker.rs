@@ -3,6 +3,10 @@
 //! - **Silhouette hit-testing.** Clicks only land on his opaque pixels. While the cursor
 //!   is near his window the alpha mask decides whether the window ignores the mouse.
 //! - **Recovery.** If a display change leaves him off every screen, he's moved back.
+//! - **Crisp pixels at a steady size.** When his window's DPI changes (he crossed to a
+//!   display with different scaling) or something resizes it off a whole-number pixel
+//!   scale (Windows may, on that same move), he's re-snapped once things settle,
+//!   rather than racing the OS's own resize.
 //! - **Debounced saving** of settings.
 //!
 //! Polls at ~30 Hz only while the cursor is near him, ~10 Hz otherwise. Where the
@@ -21,6 +25,8 @@ const NEAR_TICK: Duration = Duration::from_millis(33);
 const FAR_TICK: Duration = Duration::from_millis(100);
 const HIDDEN_TICK: Duration = Duration::from_millis(300);
 const REACHABILITY_EVERY: Duration = Duration::from_secs(3);
+/// How long a changed DPI or off-scale size must hold still before he's re-snapped.
+const SNAP_AFTER: Duration = Duration::from_millis(150);
 /// Physical px around his window within which the cursor counts as "near".
 const NEAR_MARGIN: f64 = 64.0;
 
@@ -34,6 +40,8 @@ pub fn spawn(app: AppHandle) {
 fn run(app: AppHandle) {
     let mut last_check = Instant::now();
     let mut cursor_supported = true;
+    let mut applied_dpi: Option<f64> = None;
+    let mut unsettled: Option<((f64, f64, f64), Instant)> = None;
     loop {
         let st = app.state::<AppState>();
         st.flush_if_due();
@@ -49,6 +57,20 @@ fn run(app: AppHandle) {
         if last_check.elapsed() >= REACHABILITY_EVERY {
             stage::ensure_reachable(&app);
             last_check = Instant::now();
+        }
+        if let (Some(r), Some(dpi)) = (stage::current_rect(&app), stage::dpi(&app)) {
+            let applied = *applied_dpi.get_or_insert(dpi);
+            let now = (r.w, r.h, dpi);
+            unsettled = match unsettled {
+                _ if knight::is_exact(r.w, r.h) && dpi == applied => None,
+                Some((seen, since)) if seen == now && since.elapsed() >= SNAP_AFTER => {
+                    stage::refit(&app);
+                    applied_dpi = Some(dpi);
+                    None
+                }
+                Some((seen, since)) if seen == now => Some((seen, since)),
+                _ => Some((now, Instant::now())),
+            };
         }
         if passive || !cursor_supported {
             stage::set_ignore(&app, passive);

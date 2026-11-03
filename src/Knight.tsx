@@ -1,29 +1,20 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import meta from "./assets/knight.meta.json";
-import full from "./assets/knight@full.webp";
-import half from "./assets/knight@half.webp";
+// The sprite (with its baked contact shadow) is written by
+// tools/asset-pipeline/pixel_knight.py --export.
+import sprite from "./assets/knight.png";
 import * as ipc from "./ipc";
+import { LINE, wheelSteps } from "./wheel";
 
-/** Window height below the figure reserved for his shadow. Matches SHADOW_BAND in knight.rs. */
-const SHADOW_BAND = 0.03;
 /** Pointer travel (px) that turns a press into a drag rather than a click. */
 const DRAG_THRESHOLD = 4;
-const RESIZE_STEP = 1.06;
-/** Alpha (0–255) above which a pixel counts as part of him. */
+/** Alpha (0–255) above which a pixel counts as part of him (the shadow is fainter). */
 const SOLID = 128;
 
-const shadow = {
-  left: `${((meta.feetLeft + meta.feetRight) / 2) * 100}%`,
-  top: `${(meta.groundY - 0.008) * 100}%`,
-  width: `${(meta.feetRight - meta.feetLeft) * 118}%`,
-  height: `${SHADOW_BAND * 2.2 * 100}%`,
-};
-
-/** A small alpha map of the figure so clicks on empty pixels are ignored. */
+/** The sprite's alpha, pixel for pixel, so clicks on empty or shadow pixels are ignored. */
 function alphaMap(img: HTMLImageElement) {
-  const w = Math.ceil(img.naturalWidth / 4);
-  const h = Math.ceil(img.naturalHeight / 4);
+  const w = img.naturalWidth;
+  const h = img.naturalHeight;
   const ctx = Object.assign(document.createElement("canvas"), { width: w, height: h }).getContext("2d");
   if (!ctx) return null;
   ctx.drawImage(img, 0, 0, w, h);
@@ -47,28 +38,33 @@ export function Knight() {
     return () => void unlisten.then((f) => f());
   }, []);
 
-  // Ctrl+wheel and Ctrl +/- resize; coalesced to one request per frame.
+  // Ctrl+wheel and Ctrl +/- resize in whole pixel-scale steps, at most one request
+  // per frame.
   useEffect(() => {
-    let factor = 1;
+    let wheel = 0;
+    let pending = 0;
     let frame = 0;
-    const nudge = (f: number) => {
-      if (locked.current) return;
-      factor *= f;
+    const step = (n: number) => {
+      if (locked.current || n === 0) return;
+      pending += n;
       frame ||= requestAnimationFrame(() => {
         frame = 0;
-        void ipc.resizeBy(factor);
-        factor = 1;
+        if (pending) void ipc.resizeStep(pending);
+        pending = 0;
       });
     };
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
-      nudge(e.deltaY < 0 ? RESIZE_STEP : 1 / RESIZE_STEP);
+      const delta = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * LINE : e.deltaY;
+      const [n, rest] = wheelSteps(wheel, delta);
+      wheel = rest;
+      step(n);
     };
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey) return;
-      if (e.key === "+" || e.key === "=") nudge(RESIZE_STEP);
-      else if (e.key === "-") nudge(1 / RESIZE_STEP);
+      if (e.key === "+" || e.key === "=") step(1);
+      else if (e.key === "-") step(-1);
       else return;
       e.preventDefault();
     };
@@ -128,14 +124,11 @@ export function Knight() {
         if (onFigure(e as unknown as PointerEvent)) void ipc.openContextMenu();
       }}
     >
-      <div className={ready ? "figure ready" : "figure"} style={{ aspectRatio: `${meta.width} / ${meta.height}` }}>
-        <div className="shadow" style={shadow} />
+      <div className={ready ? "figure ready" : "figure"}>
         <img
           ref={imgRef}
           className="knight"
-          src={full}
-          srcSet={`${half} ${Math.floor(meta.width / 2)}w, ${full} ${meta.width}w`}
-          sizes="100vw"
+          src={sprite}
           alt="A battle-worn knight standing watch"
           draggable={false}
           onLoad={onLoad}

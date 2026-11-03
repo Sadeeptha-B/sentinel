@@ -33,27 +33,14 @@ body {
   opacity: 1;
 }
 
+/* The window is an exact whole-number multiple of the sprite, so each sprite pixel
+   maps to a crisp k×k block of screen pixels. */
 .knight {
-  position: relative;
   display: block;
   width: 100%;
   height: auto;
+  image-rendering: pixelated;
   -webkit-user-drag: none;
-}
-
-/* A soft contact shadow so he stands on the desktop rather than floating over it. */
-.shadow {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(
-    closest-side,
-    rgba(0, 0, 0, 0.42),
-    rgba(0, 0, 0, 0.2) 55%,
-    rgba(0, 0, 0, 0) 100%
-  );
-  filter: blur(2px);
-  pointer-events: none;
 }
 
 /* ── Whisper ────────────────────────────────────────── */

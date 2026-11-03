@@ -1,13 +1,12 @@
 {
-  "width": 853,
-  "height": 1415,
-  "aspect": 0.602826855123675,
+  "width": 58,
+  "height": 93,
+  "bandRows": 3,
   "mask": {
-    "width": 214,
-    "height": 354,
-    "scale": 4
+    "width": 58,
+    "height": 93,
+    "scale": 1
   },
-  "groundY": 0.9936395759717315,
-  "feetLeft": 0.19929660023446658,
-  "feetRight": 0.9507620164126612
+  "feetLeft": 0.1206896551724138,
+  "feetRight": 0.8448275862068966
 }
