@@ -14,13 +14,18 @@ use crate::knight::DEFAULT_HEIGHT;
 /// How long settings must stay unchanged before they're written.
 const SAVE_DELAY: Duration = Duration::from_millis(500);
 
+/// Persisted as `settings.json`. Files from older versions must keep loading: every
+/// field takes its default when missing (`serde(default)`), and an unreadable file
+/// falls back to defaults. Don't rename a field or change what it means without a
+/// migration.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
     /// Outer window position in physical pixels; `None` until first placed.
     pub x: Option<i32>,
     pub y: Option<i32>,
-    /// Figure height in logical pixels.
+    /// The user's intended figure height in logical pixels (not the scale `k`). Only
+    /// a user resize stores it; refits to a display leave it alone (docs/DECISIONS.md D9).
     pub height: f64,
     pub visible: bool,
     pub always_on_top: bool,
