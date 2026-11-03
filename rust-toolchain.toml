@@ -1,0 +1,6 @@
+# One Rust version for local builds and CI, so clippy and the compiler agree.
+# Bump it deliberately, in its own commit, and fix any new clippy warnings there.
+[toolchain]
+channel = "1.99.1"
+components = ["clippy"]
+profile = "minimal"
