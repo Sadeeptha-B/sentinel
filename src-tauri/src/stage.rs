@@ -1,0 +1,435 @@
+//! Desktop window management: the knight's window and the quote ("whisper") window,
+//! placement and recovery, feet-anchored resizing, visibility and mode toggles.
+//!
+//! Locking discipline: never hold an `AppState` mutex across a window call. Window
+//! calls made off the main thread block on it, so holding a lock there can deadlock.
+
+use std::sync::atomic::Ordering;
+
+use serde::Serialize;
+use tauri::{
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, Window, WindowEvent,
+};
+
+use crate::{
+    AppState, UiState,
+    knight::{self, Rect, Side},
+    settings::Settings,
+};
+
+pub const KNIGHT: &str = "knight";
+pub const WHISPER: &str = "whisper";
+/// Logical size of the quote window.
+const WHISPER_SIZE: (f64, f64) = (360.0, 170.0);
+/// Logical gap between the default spot and the screen's right edge.
+const MARGIN: f64 = 24.0;
+/// Logical size of the part of him that must stay on some screen.
+const REACHABLE_MIN: f64 = 64.0;
+
+#[derive(Clone, Copy)]
+struct Screen {
+    bounds: Rect,
+    work: Rect,
+    scale: f64,
+}
+
+impl From<&tauri::Monitor> for Screen {
+    fn from(m: &tauri::Monitor) -> Self {
+        let (p, s, wa) = (m.position(), m.size(), m.work_area());
+        Screen {
+            bounds: Rect::new(p.x as f64, p.y as f64, s.width as f64, s.height as f64),
+            work: Rect::new(
+                wa.position.x as f64,
+                wa.position.y as f64,
+                wa.size.width as f64,
+                wa.size.height as f64,
+            ),
+            scale: m.scale_factor(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WhisperPayload {
+    seq: u64,
+    /// `None` asks the whisper window to choose a quote itself.
+    text: Option<String>,
+    side: Side,
+    font_px: f64,
+}
+
+fn state(app: &AppHandle) -> tauri::State<'_, AppState> {
+    app.state::<AppState>()
+}
+
+fn settings(app: &AppHandle) -> Settings {
+    state(app).settings.lock().unwrap().clone()
+}
+
+fn knight_window(app: &AppHandle) -> Option<WebviewWindow> {
+    app.get_webview_window(KNIGHT)
+}
+
+fn screens(win: &WebviewWindow) -> Vec<Screen> {
+    win.available_monitors().unwrap_or_default().iter().map(Screen::from).collect()
+}
+
+fn primary(win: &WebviewWindow) -> Option<Screen> {
+    match win.primary_monitor() {
+        Ok(Some(m)) => Some(Screen::from(&m)),
+        _ => screens(win).into_iter().next(),
+    }
+}
+
+/// The screen showing most of `r`, falling back to the primary screen.
+fn screen_for(win: &WebviewWindow, r: Rect) -> Option<Screen> {
+    let best = screens(win)
+        .into_iter()
+        .map(|s| {
+            let (w, h) = r.overlap(&s.bounds);
+            (w * h, s)
+        })
+        .filter(|(area, _)| *area > 0.0)
+        .max_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(_, s)| s);
+    best.or_else(|| primary(win))
+}
+
+/// Physical window rect at `pos` for a figure `height` logical px tall on `screen`,
+/// with the height clamped to suit that screen.
+fn fitted(screen: &Screen, x: f64, y: f64, height: f64) -> (Rect, f64) {
+    let height = knight::clamp_height(height, screen.scale, screen.work.h / screen.scale);
+    let (w, h) = knight::window_size(height);
+    (Rect::new(x, y, (w * screen.scale).round(), (h * screen.scale).round()), height)
+}
+
+fn default_placement(win: &WebviewWindow, height: f64) -> Option<(Rect, f64)> {
+    let screen = primary(win)?;
+    let (r, height) = fitted(&screen, 0.0, 0.0, height);
+    Some((knight::default_rect(screen.work, r.w, r.h, MARGIN * screen.scale), height))
+}
+
+/// Move and resize in one step so his feet never visibly jump.
+fn apply_rect(app: &AppHandle, win: &WebviewWindow, r: Rect) {
+    *state(app).rect.lock().unwrap() = r;
+    #[cfg(windows)]
+    if let Ok(hwnd) = win.hwnd() {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos,
+        };
+        // SAFETY: hwnd belongs to a live window owned by this process.
+        let moved = unsafe {
+            SetWindowPos(
+                hwnd,
+                None,
+                r.x as i32,
+                r.y as i32,
+                r.w as i32,
+                r.h as i32,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            )
+        };
+        if moved.is_ok() {
+            return;
+        }
+    }
+    let _ = win.set_position(PhysicalPosition::new(r.x as i32, r.y as i32));
+    let _ = win.set_size(PhysicalSize::new(r.w as u32, r.h as u32));
+}
+
+/// Mutate settings, schedule a save and tell the knight window and tray.
+fn update(app: &AppHandle, change: impl FnOnce(&mut Settings)) {
+    let st = state(app);
+    let snapshot = {
+        let mut s = st.settings.lock().unwrap();
+        change(&mut s);
+        s.clone()
+    };
+    st.mark_dirty();
+    let _ = app.emit_to(KNIGHT, "sentinel://state", UiState::from(&snapshot));
+    crate::tray::sync(app, &snapshot);
+}
+
+pub fn build(app: &AppHandle) -> tauri::Result<()> {
+    let s = settings(app);
+    let (w, h) = knight::window_size(s.height);
+    let knight = WebviewWindowBuilder::new(app, KNIGHT, WebviewUrl::App("index.html".into()))
+        .title("Sentinel")
+        .inner_size(w, h)
+        .transparent(true)
+        .decorations(false)
+        .shadow(false)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .always_on_top(s.always_on_top)
+        .skip_taskbar(true)
+        .focused(false)
+        .visible(false)
+        .build()?;
+
+    let (ww, wh) = WHISPER_SIZE;
+    let whisper = WebviewWindowBuilder::new(app, WHISPER, WebviewUrl::App("index.html".into()))
+        .title("Sentinel")
+        .inner_size(ww, wh)
+        .transparent(true)
+        .decorations(false)
+        .shadow(false)
+        .resizable(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .focusable(false)
+        .focused(false)
+        .visible(false)
+        .build()?;
+    whisper.set_ignore_cursor_events(true)?;
+
+    place(app, &knight, s.x.zip(s.y), s.height);
+    if s.passive {
+        set_ignore(app, true);
+    }
+    Ok(())
+}
+
+/// Restore the saved position if he would still be reachable there, else the default.
+fn place(app: &AppHandle, win: &WebviewWindow, saved: Option<(i32, i32)>, height: f64) {
+    let all = screens(win);
+    let bounds: Vec<Rect> = all.iter().map(|s| s.bounds).collect();
+    let restored = saved.and_then(|(x, y)| {
+        let (x, y) = (x as f64, y as f64);
+        let screen = all
+            .iter()
+            .find(|s| s.bounds.contains(x, y))
+            .or_else(|| all.iter().find(|s| s.bounds.inflate(400.0).contains(x, y)))?;
+        let (r, h) = fitted(screen, x, y, height);
+        knight::is_reachable(r, &bounds, REACHABLE_MIN * screen.scale).then_some((r, h))
+    });
+    if let Some((r, h)) = restored.or_else(|| default_placement(win, height)) {
+        apply_rect(app, win, r);
+        update(app, |s| {
+            s.x = Some(r.x as i32);
+            s.y = Some(r.y as i32);
+            s.height = h;
+        });
+    }
+}
+
+/// The page has drawn the knight; show the window if he should be visible.
+pub fn reveal(app: &AppHandle) {
+    state(app).revealed.store(true, Ordering::Relaxed);
+    if settings(app).visible
+        && let Some(win) = knight_window(app)
+    {
+        let _ = win.show();
+    }
+}
+
+pub fn reset_position(app: &AppHandle) {
+    let Some(win) = knight_window(app) else { return };
+    let height = settings(app).height;
+    if let Some((r, h)) = default_placement(&win, height) {
+        apply_rect(app, &win, r);
+        update(app, |s| {
+            s.x = Some(r.x as i32);
+            s.y = Some(r.y as i32);
+            s.height = h;
+        });
+    }
+}
+
+/// Snap him back if a display change or bad coordinates left him out of reach.
+pub fn ensure_reachable(app: &AppHandle) {
+    let Some(win) = knight_window(app) else { return };
+    let r = *state(app).rect.lock().unwrap();
+    let all = screens(&win);
+    if all.is_empty() {
+        return; // Monitor enumeration failed; don't guess.
+    }
+    let scale = win.scale_factor().unwrap_or(1.0);
+    let bounds: Vec<Rect> = all.iter().map(|s| s.bounds).collect();
+    if !knight::is_reachable(r, &bounds, REACHABLE_MIN * scale) {
+        reset_position(app);
+    }
+}
+
+pub fn resize_to(app: &AppHandle, height: f64) {
+    let Some(win) = knight_window(app) else { return };
+    let current = *state(app).rect.lock().unwrap();
+    let scale = win.scale_factor().unwrap_or(1.0);
+    let work_h = screen_for(&win, current).map_or(1080.0, |s| s.work.h / s.scale);
+    let height = knight::clamp_height(height, scale, work_h);
+    let (w, h) = knight::window_size(height);
+    let next = knight::anchored_resize(current, (w * scale).round(), (h * scale).round());
+    if next != current {
+        apply_rect(app, &win, next);
+    }
+    update(app, |s| s.height = height);
+}
+
+pub fn resize_by(app: &AppHandle, factor: f64) {
+    let height = settings(app).height;
+    resize_to(app, height * factor);
+}
+
+pub fn set_visible(app: &AppHandle, visible: bool) {
+    let Some(win) = knight_window(app) else { return };
+    if visible {
+        ensure_reachable(app);
+        if state(app).revealed.load(Ordering::Relaxed) {
+            let _ = win.show();
+        }
+    } else {
+        let _ = win.hide();
+        hide_whisper(app);
+    }
+    update(app, |s| s.visible = visible);
+}
+
+pub fn toggle_visible(app: &AppHandle) {
+    let visible = settings(app).visible;
+    set_visible(app, !visible);
+}
+
+pub fn set_always_on_top(app: &AppHandle, on: bool) {
+    if let Some(win) = knight_window(app) {
+        let _ = win.set_always_on_top(on);
+    }
+    update(app, |s| s.always_on_top = on);
+}
+
+pub fn set_locked(app: &AppHandle, on: bool) {
+    update(app, |s| s.locked = on);
+}
+
+pub fn set_passive(app: &AppHandle, on: bool) {
+    // Turning passive off makes the whole window clickable at once; the ticker then
+    // refines it back to the silhouette as the cursor moves.
+    set_ignore(app, on);
+    update(app, |s| s.passive = on);
+}
+
+pub fn set_stand_watch(app: &AppHandle, on: bool) {
+    update(app, |s| s.stand_watch = on);
+    let line = if on { "I stand ready." } else { "The watch is ended. Rest well." };
+    whisper(app, Some(line));
+}
+
+/// Global shortcut / second launch: make him visible, clickable and on screen.
+pub fn summon(app: &AppHandle) {
+    let s = settings(app);
+    if !s.visible {
+        set_visible(app, true);
+    }
+    if s.passive {
+        set_passive(app, false);
+    }
+    ensure_reachable(app);
+}
+
+/// Let clicks pass through the knight's window (`true`) or catch them (`false`).
+pub fn set_ignore(app: &AppHandle, ignore: bool) {
+    let st = state(app);
+    {
+        let mut current = st.ignoring.lock().unwrap();
+        if *current == Some(ignore) {
+            return;
+        }
+        *current = Some(ignore);
+    }
+    let applied = knight_window(app).is_some_and(|w| w.set_ignore_cursor_events(ignore).is_ok());
+    if !applied {
+        *st.ignoring.lock().unwrap() = None;
+    }
+}
+
+/// Show a line beside him: `Some(text)` verbatim, or `None` for a quote of the
+/// whisper window's choosing.
+pub fn whisper(app: &AppHandle, text: Option<&str>) {
+    let (Some(knight), Some(whisper)) = (knight_window(app), app.get_webview_window(WHISPER))
+    else {
+        return;
+    };
+    let s = settings(app);
+    if !s.visible {
+        return;
+    }
+    let st = state(app);
+    let rect = *st.rect.lock().unwrap();
+    let scale = knight.scale_factor().unwrap_or(1.0);
+    let work = screen_for(&knight, rect).map_or(rect, |s| s.work);
+    let (r, side) =
+        knight::whisper_rect(rect, work, WHISPER_SIZE.0 * scale, WHISPER_SIZE.1 * scale);
+    let _ = whisper.set_position(PhysicalPosition::new(r.x as i32, r.y as i32));
+    let seq = st.whisper_seq.fetch_add(1, Ordering::Relaxed) + 1;
+    st.whisper_shown.store(true, Ordering::Relaxed);
+    let _ = whisper.show();
+    let _ = app.emit_to(
+        WHISPER,
+        "sentinel://whisper",
+        WhisperPayload {
+            seq,
+            text: text.map(str::to_owned),
+            side,
+            font_px: (s.height * 0.046).clamp(15.0, 24.0),
+        },
+    );
+}
+
+/// The whisper window finished fading line `seq`; hide it unless a newer one began.
+pub fn whisper_done(app: &AppHandle, seq: u64) {
+    if state(app).whisper_seq.load(Ordering::Relaxed) == seq {
+        hide_whisper(app);
+    }
+}
+
+fn hide_whisper(app: &AppHandle) {
+    if state(app).whisper_shown.swap(false, Ordering::Relaxed)
+        && let Some(w) = app.get_webview_window(WHISPER)
+    {
+        let _ = w.hide();
+    }
+}
+
+pub fn exit(app: &AppHandle) {
+    state(app).flush();
+    app.exit(0);
+}
+
+pub fn on_window_event(win: &Window, event: &WindowEvent) {
+    if win.label() != KNIGHT {
+        return;
+    }
+    let app = win.app_handle();
+    let st = state(app);
+    match event {
+        WindowEvent::Moved(p) => {
+            {
+                let mut r = st.rect.lock().unwrap();
+                (r.x, r.y) = (p.x as f64, p.y as f64);
+            }
+            {
+                let mut s = st.settings.lock().unwrap();
+                (s.x, s.y) = (Some(p.x), Some(p.y));
+            }
+            st.mark_dirty();
+            // A quote left hanging beside his old spot looks detached.
+            hide_whisper(app);
+        }
+        WindowEvent::Resized(size) => {
+            let mut r = st.rect.lock().unwrap();
+            (r.w, r.h) = (size.width as f64, size.height as f64);
+        }
+        WindowEvent::ScaleFactorChanged { .. } => {
+            // Re-fit to the new DPI once Windows has finished its own resize.
+            let app = app.clone();
+            let _ = app.clone().run_on_main_thread(move || {
+                let height = settings(&app).height;
+                resize_to(&app, height);
+            });
+        }
+        WindowEvent::CloseRequested { .. } => exit(app),
+        _ => {}
+    }
+}
