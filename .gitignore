@@ -1,0 +1,9 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+tools/asset-pipeline/.venv/
+tools/asset-pipeline/out/
+__pycache__/
+*.log
+.DS_Store
