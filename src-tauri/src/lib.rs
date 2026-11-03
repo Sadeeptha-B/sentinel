@@ -19,6 +19,11 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use settings::Settings;
 
+/// Shared app state, used from the main thread and the ticker thread.
+///
+/// Never hold one of these mutexes across a window, menu or tray call: such a call
+/// made off the main thread blocks until the main thread runs it, so a lock held
+/// across it can deadlock. Clone or copy the value out first.
 pub struct AppState {
     pub settings: Mutex<Settings>,
     saver: settings::Saver,

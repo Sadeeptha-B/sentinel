@@ -36,6 +36,10 @@ pub struct MaskMeta {
     pub height: usize,
 }
 
+// The sprite (src/assets/knight.png), this meta and this mask are one contract:
+// regenerate all three together with `pixel_knight.py --export stocky`, and never
+// edit them by hand. `mask_matches_the_sprite` only checks that the mask's size
+// agrees with this meta; nothing tests the PNG against the mask.
 pub static META: LazyLock<Meta> = LazyLock::new(|| {
     serde_json::from_str(include_str!("../assets/knight.meta.json")).expect("valid knight meta")
 });

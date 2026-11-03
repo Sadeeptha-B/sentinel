@@ -112,7 +112,8 @@ fn default_placement(win: &WebviewWindow, height: f64) -> Option<(Rect, f64)> {
     Some((knight::default_rect(screen.work, r.w, r.h, MARGIN * screen.scale), height))
 }
 
-/// The knight window's actual outer rect in physical px.
+/// The knight window's actual outer rect in physical px. On Windows it's read from
+/// the OS, because the windowing layer's cached geometry went stale in testing.
 pub fn current_rect(app: &AppHandle) -> Option<Rect> {
     #[cfg(windows)]
     {
@@ -407,6 +408,8 @@ pub fn set_stand_watch(app: &AppHandle, on: bool) {
 }
 
 /// Global shortcut / second launch: make him visible, clickable and on screen.
+/// This is the one-step recovery path: it must always undo Hide, Passive and an
+/// off-screen position. The tray menu offers each separately.
 pub fn summon(app: &AppHandle) {
     let s = settings(app);
     if !s.visible {
