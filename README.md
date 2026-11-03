@@ -18,6 +18,7 @@ Built with Tauri 2, React and TypeScript. Runs fully offline.
 - **Click-through.** Clicks only land on the knight himself. Transparent pixels around him pass clicks to the window underneath.
 - **Passive mode** makes him fully click-through. Undo it from the tray menu or with `Ctrl+Alt+K`.
 - **Quotes** appear beneath his feet when there's room, otherwise over his lower half (for example while he stands on the taskbar). They fade in, then fade out on their own. Nothing appears unless you ask.
+- **Lock Position** stops him being dragged or resized (the Size menu greys out). He says "I hold this ground." when you lock him, and again if you try to move or resize him while he's locked.
 - **Stand Watch** is symbolic only. There are no timers and nothing is tracked.
 - **Sizes are whole-number pixel scales.** He's pixel art, so each sprite pixel is always drawn as a crisp square block of screen pixels. Resizing steps between scales (Small, Medium and Large are 3×, 4× and 5× at 100% display scaling), and on displays with other scaling he snaps to the scale that gives about the same apparent size.
 
