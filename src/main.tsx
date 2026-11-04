@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import "@fontsource/eb-garamond/latin-500-italic.css";
+import "@fontsource/im-fell-english/latin-400.css";
 import { Knight } from "./Knight";
 import { Whisper } from "./Whisper";
 import "./styles.css";

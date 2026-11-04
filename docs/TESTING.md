@@ -39,6 +39,9 @@ Unit tests can't see transparency, DPI changes, click-through or the tray, so ch
 | Exit and relaunch | Position and size are restored. |
 | Second launch | Summons the running instance, with no duplicate. |
 | Idle CPU | 0.00% |
+| Stand Watch line (D14) | "I stand ready." stays. A quote replaces it, then it fades back in. A drag or Ctrl+wheel resize hides it, and it returns at his new spot within a second of him settling. Hide hides it, and a second launch brings it back. It's there at launch when Stand Watch was saved on. With Always on Top off it sits directly above him and goes behind other windows with him; turning it back on makes it topmost again. Stand Down shows the farewell line, which fades for good. |
+| Stand Watch line after a right-click | At the default spot, with the line over his lower half, right-clicking him and pressing Esc leaves the line's window directly above his, with Always on Top on and off. With it off, neither window is topmost, and an ordinary window opened over him covers both. |
+| Dev build alongside the installed knight | Both run. The dev knight has its own settings and its tray tooltip says "Sentinel (dev)". |
 
 ### Outstanding
 
@@ -55,7 +58,8 @@ Unit tests can't see transparency, DPI changes, click-through or the tray, so ch
   3. Confirm the window is `58k × 96k` on each side, with `k` switching between 4 (100%) and 5 (125%) at the default size.
   4. Confirm his size is the same after the round trip.
 - **Installers:** run `npm run tauri build`, install, and check the first-launch default (bottom-right, 4× at 100%). Also check that the installer runs without a SmartScreen prompt, that `sentinel.exe` runs without installing, that reinstalling keeps settings, and that uninstalling keeps them unless the app-data box is ticked.
-- **Dev build alongside the installed knight:** with the installed knight running, `npm start` brings up a second knight with "Sentinel (dev)" in its tray tooltip and its own settings.
+- **Stand Watch line, idle CPU:** measure it in a release build with the line showing. The debug build read 0.05–0.55% of one core both with and without the line, which is noise at that level.
+- **Stand Watch line, old spot:** after a drag, check frame by frame that the line never flashes where he was. The sampled checks couldn't see a single frame.
 - **Linux:** X11 and Wayland (GNOME and KDE). CI only shows that it builds and passes the unit tests there; nobody has run the app. Record the actual behaviour in the README's platform notes.
 
 ### How to run live checks

@@ -15,7 +15,7 @@ Sentinel is a pixel-art knight in a frameless, transparent, always-on-top window
 
 - **The brief's out-of-scope list (§9) is binding.** No animation, extra characters or skins, customisation, timers, productivity features, chat or AI content, accounts or sync.
 - **Stillness is the design.** Nothing moves or appears unless the user acts.
-  - Quotes appear only on request, never on a timer.
+  - Quotes appear only on request, never on a timer. The one standing line is Stand Watch's "I stand ready.", which stays while the user keeps that mode on (D14).
   - No idle animation frames.
   - No notifications.
 - **Only the figure is visible.** No window chrome, badges, cards or permanent UI. Feedback comes in his voice, as a whisper (see D8).
@@ -54,6 +54,7 @@ Breaking one of these causes a regression. Each is enforced by a test, or docume
 | 11 | **The recovery path always works.** `Ctrl+Alt+K` (and a second launch) undoes Hide, Passive and an off-screen position in one step. The tray menu offers each separately: Show, Passive and Reset Position. Tray left-click only toggles visibility (showing also brings him back on screen). | `stage::summon` doc; `register_shortcut` |
 | 12 | **Lock blocks every user move and resize.** Rust refuses resizes from any path. Dragging can only be blocked in the page, because the page starts the native drag itself (`startDragging`), so keep that guard. | `stage::resize_to`; `onPointerMove` in `Knight.tsx` |
 | 13 | **`src/ipc.ts` matches the commands and events in `lib.rs`.** | header comment in `ipc.ts` |
+| 14 | **Lines are shown and hidden on the main thread only.** The ticker hands the Stand Watch line to it; shown from the ticker, it can overtake a Hide or Stand Down and stay up. | `stage::show_line` doc; `stage::restore_standing_line` |
 
 **When you add an invariant:**
 1. Enforce it with a test if it can be tested. Otherwise write a comment at the code that enforces it, saying what breaks if it's violated.

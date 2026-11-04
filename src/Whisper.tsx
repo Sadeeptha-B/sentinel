@@ -25,7 +25,18 @@ export function Whisper() {
       const line: Line = { ...req, text, leaving: false };
       setLines((prev) => [...prev.map((l) => ({ ...l, leaving: true })), line]);
     });
-    return () => void unlisten.then((f) => f());
+    const unlistenClear = ipc.onWhisperClear(() => setLines([]));
+    // Under StrictMode the first setup is torn down at once; only the live one may
+    // tell Rust that lines will be heard.
+    let live = true;
+    void Promise.all([unlisten, unlistenClear]).then(() => {
+      if (live) void ipc.whisperReady();
+    });
+    return () => {
+      live = false;
+      void unlisten.then((f) => f());
+      void unlistenClear.then((f) => f());
+    };
   }, []);
 
   // Stable identity: lines' animation effects depend on it and must not restart.
@@ -47,6 +58,18 @@ function WhisperLine({ line, onGone }: { line: Line; onGone: (seq: number) => vo
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    if (line.stay) {
+      // The Stand Watch line: fade in and stay until a newer line replaces it.
+      const anim = el.animate(
+        [
+          { opacity: 0, transform: "translateY(4px)" },
+          { opacity: 1, transform: "translateY(0)" },
+        ],
+        { duration: FADE_IN, delay: CROSSFADE / 2, easing: "cubic-bezier(0.2, 0.6, 0.3, 1)", fill: "forwards" },
+      );
+      main.current = anim;
+      return () => anim.cancel();
+    }
     const hold = holdFor(line.text);
     const total = FADE_IN + hold + FADE_OUT;
     const anim = el.animate(
@@ -67,7 +90,7 @@ function WhisperLine({ line, onGone }: { line: Line; onGone: (seq: number) => vo
       () => {}, // cancelled: superseded or unmounted
     );
     return () => anim.cancel();
-  }, [line.seq, line.text, onGone]);
+  }, [line.seq, line.text, line.stay, onGone]);
 
   useEffect(() => {
     const el = ref.current;
