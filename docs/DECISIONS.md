@@ -43,7 +43,7 @@ Format: **what** was decided, **why**, the **alternatives** rejected, and anythi
 - **Why:** the brief's visual dignity (§3.4).
 
 ### D6. Quote typography
-*2026-11-03 · Active*
+*2026-11-03 · Superseded by D15*
 
 - **What:** EB Garamond italic in muted gold, with a feathered dark shadow and no card or bubble.
 - **Why:** from the brief. It stayed legible over busy windows in testing.
@@ -103,3 +103,22 @@ Format: **what** was decided, **why**, the **alternatives** rejected, and anythi
 
 - **What:** a branch per change, with small commits that each build and pass. The owner rebase-merges PRs, and merges, pushes and branch deletions need the owner's go-ahead.
 - **Why:** commits land on `main` as written, so each one should be reviewable, bisectable and revertable on its own.
+
+### D14. "I stand ready." stays on screen during Stand Watch
+*2026-11-04 · Active · Departs from the brief's §4.4 "No permanent text overlay" and §5.5 "optional brief message"*
+
+- **What:**
+  - While Stand Watch is on, "I stand ready." stays by him instead of fading.
+  - Other lines (a quote, the lock lines) take its place for their few seconds. Once none is showing and he has held still for 0.6 s, it fades back in. Dragging or resizing hides it until he's still, and Hide hides it until Show.
+  - If Stand Watch is saved as on, the line appears at launch.
+  - It keeps to his layer: topmost only while he's Always on Top. Brief lines are still topmost.
+  - Stand Down says "The watch is ended. Rest well." and the line goes.
+- **Why:** the owner's choice: the watch should be visible while it lasts. It is still shown only because the user chose the mode.
+- **Alternatives rejected:** the brief's one-off message; a line that never yields to quotes or lock lines; showing it only after toggling, not at launch; keeping it topmost when he isn't.
+
+### D15. Quotes are set upright in IM Fell English
+*2026-11-04 · Active · Supersedes D6*
+
+- **What:** IM Fell English (regular, upright) in the same muted gold, with the same feathered shadow and no card or bubble. Its size is 5.25% of his height, between 17 and 27 px, about 5% larger than before, because its x-height is small.
+- **Why:** the owner's choice from a comparison sheet of seven styles over dark, light and busy backgrounds. The old-press texture suits a weathered knight, and upright type reads steadier than the italic.
+- **Alternatives rejected:** EB Garamond italic (D6), upright, upright small caps and upright in soft white; Cinzel capitals; Cormorant Garamond.

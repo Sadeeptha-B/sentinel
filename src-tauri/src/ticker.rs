@@ -7,6 +7,8 @@
 //!   display with different scaling) or something resizes it off a whole-number pixel
 //!   scale (Windows may, on that same move), he's re-snapped once things settle,
 //!   rather than racing the OS's own resize.
+//! - **The Stand Watch line** comes back once he has held still and no other line is
+//!   showing (D14).
 //! - **Debounced saving** of settings.
 //!
 //! Polls at ~30 Hz only while the cursor is near him, ~10 Hz otherwise. While the
@@ -30,6 +32,9 @@ const NO_CURSOR_TICK: Duration = Duration::from_millis(500);
 const REACHABILITY_EVERY: Duration = Duration::from_secs(3);
 /// How long a changed DPI or off-scale size must hold still before he's re-snapped.
 const SNAP_AFTER: Duration = Duration::from_millis(150);
+/// How long he must hold still before the Stand Watch line comes back, so it doesn't
+/// flicker in and out during a drag or a run of resizes.
+const LINE_AFTER: Duration = Duration::from_millis(600);
 /// Physical px around his window within which the cursor counts as "near".
 const NEAR_MARGIN: f64 = 64.0;
 
@@ -44,6 +49,7 @@ fn run(app: AppHandle) {
     let mut last_check = Instant::now();
     let mut applied_dpi: Option<f64> = None;
     let mut unsettled: Option<((f64, f64, f64), Instant)> = None;
+    let mut still: Option<(knight::Rect, Instant)> = None;
     loop {
         let st = app.state::<AppState>();
         st.flush_if_due();
@@ -72,6 +78,17 @@ fn run(app: AppHandle) {
                 }
                 Some((seen, since)) if seen == now => Some((seen, since)),
                 _ => Some((now, Instant::now())),
+            };
+            still = match still {
+                Some((seen, since)) if seen == r => {
+                    if since.elapsed() >= LINE_AFTER {
+                        // Cheap when there's nothing to do: a few atomic loads and the
+                        // settings lock, with no call to the main thread.
+                        stage::restore_standing_line(&app, seen);
+                    }
+                    Some((seen, since))
+                }
+                _ => Some((r, Instant::now())),
             };
         }
         if passive {

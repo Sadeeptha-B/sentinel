@@ -39,6 +39,10 @@ pub struct AppState {
     /// Sequence number of the last "I hold this ground." line, so a locked knight
     /// doesn't repeat it while it is still showing.
     pub hold_seq: AtomicU64,
+    /// Sequence number of the last Stand Watch line, which stays on screen (D14).
+    pub standing_seq: AtomicU64,
+    /// The quote window's page is listening, so a line sent to it won't be lost.
+    pub whisper_ready: AtomicBool,
     pub tray: Mutex<Option<tray::TrayItems>>,
 }
 
@@ -53,6 +57,8 @@ impl AppState {
             whisper_seq: AtomicU64::new(0),
             whisper_shown: AtomicBool::new(false),
             hold_seq: AtomicU64::new(0),
+            standing_seq: AtomicU64::new(0),
+            whisper_ready: AtomicBool::new(false),
             tray: Mutex::new(None),
         }
     }
@@ -118,6 +124,12 @@ fn hold_ground(app: AppHandle) {
     stage::hold_ground(&app);
 }
 
+/// The quote window's page is listening for lines.
+#[tauri::command]
+fn whisper_ready(app: AppHandle) {
+    stage::whisper_ready(&app);
+}
+
 #[tauri::command]
 fn whisper_done(app: AppHandle, seq: u64) {
     stage::whisper_done(&app, seq);
@@ -154,6 +166,7 @@ pub fn run() {
             resize_step,
             open_context_menu,
             hold_ground,
+            whisper_ready,
             whisper_done
         ])
         .setup(|app| {

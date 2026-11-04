@@ -58,6 +58,9 @@ struct WhisperPayload {
     text: Option<String>,
     placement: Placement,
     font_px: f64,
+    /// Stays until a newer line replaces it or the window is hidden (the Stand Watch
+    /// line, D14), instead of fading out by itself.
+    stay: bool,
 }
 
 fn state(app: &AppHandle) -> tauri::State<'_, AppState> {
@@ -383,6 +386,8 @@ pub fn set_always_on_top(app: &AppHandle, on: bool) {
         let _ = win.set_always_on_top(on);
     }
     update(app, |s| s.always_on_top = on);
+    // The standing line follows him into or out of the always-on-top band.
+    keep_whisper_above(app);
 }
 
 pub fn set_locked(app: &AppHandle, on: bool) {
@@ -401,10 +406,59 @@ pub fn set_passive(app: &AppHandle, on: bool) {
     update(app, |s| s.passive = on);
 }
 
+const STANDING_LINE: &str = "I stand ready.";
+
 pub fn set_stand_watch(app: &AppHandle, on: bool) {
     update(app, |s| s.stand_watch = on);
-    let line = if on { "I stand ready." } else { "The watch is ended. Rest well." };
-    whisper(app, Some(line));
+    if !on {
+        whisper(app, Some("The watch is ended. Rest well."));
+    } else if state(app).whisper_ready.load(Ordering::Relaxed) {
+        show_standing_line(app);
+    } // Otherwise the page isn't listening yet, and the ticker shows it once it is.
+}
+
+/// While he stands watch, "I stand ready." stays by him (D14). Other lines take its
+/// place for a while; once none is showing and he has held still, the ticker calls
+/// this to bring it back. That one rule covers a finished quote, the end of a drag or
+/// resize, Show after Hide, and launch. `still` is where the ticker saw him hold still.
+pub fn restore_standing_line(app: &AppHandle, still: Rect) {
+    // Checked here first so an idle ticker never wakes the main thread.
+    if !standing_line_due(app) {
+        return;
+    }
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        // Checked again: a quote, Hide, Stand Down or the start of a drag may have
+        // landed in between.
+        if standing_line_due(&handle) && current_rect(&handle) == Some(still) {
+            show_standing_line(&handle);
+        }
+    });
+}
+
+/// The quote window is empty, and the Stand Watch line should be in it.
+fn standing_line_due(app: &AppHandle) -> bool {
+    let st = state(app);
+    if st.whisper_shown.load(Ordering::Relaxed)
+        || !st.whisper_ready.load(Ordering::Relaxed)
+        || !st.revealed.load(Ordering::Relaxed)
+    {
+        return false;
+    }
+    let s = st.settings.lock().unwrap();
+    s.stand_watch && s.visible
+}
+
+fn show_standing_line(app: &AppHandle) {
+    if let Some(seq) = show_line(app, Some(STANDING_LINE), true) {
+        state(app).standing_seq.store(seq, Ordering::Relaxed);
+    }
+}
+
+fn standing_line_showing(app: &AppHandle) -> bool {
+    let st = state(app);
+    st.whisper_shown.load(Ordering::Relaxed)
+        && st.standing_seq.load(Ordering::Relaxed) == st.whisper_seq.load(Ordering::Relaxed)
 }
 
 /// Global shortcut / second launch: make him visible, clickable and on screen.
@@ -447,6 +501,14 @@ pub fn set_ignore(app: &AppHandle, ignore: bool) {
 /// Show a line by him: `Some(text)` verbatim, or `None` for a quote of the
 /// whisper window's choosing. Returns the line's sequence number if it was shown.
 pub fn whisper(app: &AppHandle, text: Option<&str>) -> Option<u64> {
+    show_line(app, text, false)
+}
+
+/// Lines are shown and hidden on the main thread only. The sequence numbers, the
+/// shown flag and the events to the page then change in one order. Called from another
+/// thread, this can overtake a Hide or Stand Down that the main thread is handling, and
+/// leave the line up while he's hidden or after the watch has ended.
+fn show_line(app: &AppHandle, text: Option<&str>, stay: bool) -> Option<u64> {
     let knight = knight_window(app)?;
     let whisper = app.get_webview_window(WHISPER)?;
     let s = settings(app);
@@ -463,7 +525,10 @@ pub fn whisper(app: &AppHandle, text: Option<&str>) -> Option<u64> {
     let seq = st.whisper_seq.fetch_add(1, Ordering::Relaxed) + 1;
     st.whisper_shown.store(true, Ordering::Relaxed);
     let _ = whisper.show();
-    raise_above_knight(&whisper);
+    // A brief line may float over everything for its few seconds. The standing line
+    // stays, so it keeps to his layer: with Always on Top off it would otherwise hang
+    // over other apps while he is behind them.
+    raise_above_knight(app, &whisper, !stay || s.always_on_top);
     let _ = app.emit_to(
         WHISPER,
         "sentinel://whisper",
@@ -471,27 +536,73 @@ pub fn whisper(app: &AppHandle, text: Option<&str>) -> Option<u64> {
             seq,
             text: text.map(str::to_owned),
             placement,
-            font_px: (s.height * 0.05).clamp(16.0, 26.0),
+            // IM Fell's small x-height reads about 5% smaller than other serifs.
+            font_px: (s.height * 0.0525).clamp(17.0, 27.0),
+            stay,
         },
     );
     Some(seq)
 }
 
-/// Clicking the knight lifts him to the top of the always-on-top band; put the quote
-/// back above him so his armour never hides the words.
-fn raise_above_knight(whisper: &WebviewWindow) {
+/// Put the quote window just above the knight, so his armour never hides the words
+/// (clicking him lifts him within his band): topmost, or, with `topmost` false,
+/// directly above him among ordinary windows.
+fn raise_above_knight(app: &AppHandle, whisper: &WebviewWindow, topmost: bool) {
     #[cfg(windows)]
     if let Ok(hwnd) = whisper.hwnd() {
-        use windows::Win32::UI::WindowsAndMessaging::{
-            HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
+        use windows::Win32::{
+            Foundation::HWND,
+            UI::WindowsAndMessaging::{
+                GW_HWNDPREV, GetWindow, HWND_NOTOPMOST, HWND_TOP, HWND_TOPMOST, SWP_NOACTIVATE,
+                SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
+            },
         };
-        // SAFETY: hwnd belongs to a live window owned by this process.
-        let _ = unsafe {
-            SetWindowPos(hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
-        };
+        let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE;
+        // SAFETY: hwnd belongs to a live window owned by this process; GetWindow only
+        // reads, and a stale knight handle simply fails.
+        unsafe {
+            if topmost {
+                let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, flags);
+                return;
+            }
+            // Leave the topmost band, then go to the top of the ordinary one: NOTOPMOST
+            // alone does nothing to a window that's already ordinary. From there it
+            // slots in under whatever is directly above him, which is then always an
+            // ordinary window. Anchored to a topmost one, it would turn topmost.
+            let _ = SetWindowPos(hwnd, Some(HWND_NOTOPMOST), 0, 0, 0, 0, flags);
+            let _ = SetWindowPos(hwnd, Some(HWND_TOP), 0, 0, 0, 0, flags);
+            let knight = HWND(state(app).hwnd.load(Ordering::Relaxed) as *mut _);
+            if let Ok(above) = GetWindow(knight, GW_HWNDPREV)
+                && above != hwnd
+                && !above.is_invalid()
+            {
+                let _ = SetWindowPos(hwnd, Some(above), 0, 0, 0, 0, flags);
+            }
+        }
         return;
     }
-    let _ = whisper.set_always_on_top(true);
+    let _ = app;
+    let _ = whisper.set_always_on_top(topmost);
+}
+
+/// Put the showing line back above him after something lifted him over it: clicking
+/// him, even to open his menu, or a change to Always on Top.
+fn keep_whisper_above(app: &AppHandle) {
+    if !state(app).whisper_shown.load(Ordering::Relaxed) {
+        return;
+    }
+    if let Some(w) = app.get_webview_window(WHISPER) {
+        let topmost = !standing_line_showing(app) || settings(app).always_on_top;
+        raise_above_knight(app, &w, topmost);
+    }
+}
+
+/// The quote page is listening. Any line sent before now (at launch, or before a
+/// reload) was lost, so drop it; otherwise it would count as showing, and the Stand
+/// Watch line would never come back.
+pub fn whisper_ready(app: &AppHandle) {
+    state(app).whisper_ready.store(true, Ordering::Relaxed);
+    hide_whisper(app);
 }
 
 /// The whisper window finished fading line `seq`; hide it unless a newer one began.
@@ -506,6 +617,9 @@ fn hide_whisper(app: &AppHandle) {
         && let Some(w) = app.get_webview_window(WHISPER)
     {
         let _ = w.hide();
+        // Drop the hidden line now, so it can't flash at his old spot when the window
+        // next shows. The Stand Watch line never fades by itself, so it always would.
+        let _ = app.emit_to(WHISPER, "sentinel://whisper-clear", ());
     }
 }
 
@@ -530,6 +644,7 @@ pub fn on_window_event(win: &Window, event: &WindowEvent) {
             // A quote left hanging at his old spot looks detached.
             hide_whisper(app);
         }
+        WindowEvent::Focused(true) => keep_whisper_above(app),
         // A scale-factor change is handled by the ticker: Windows resizes the window
         // itself after this event, so a refit here would be overwritten.
         WindowEvent::CloseRequested { .. } => exit(app),
