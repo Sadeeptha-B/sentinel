@@ -1,5 +1,7 @@
 # Sentinel
 
+<img src="docs/knight.png" alt="The knight: a pixel-art figure in dark plate armour and a torn blue cloak, both hands resting on a sword planted in front of him" width="232" align="right">
+
 A battle-worn knight who stands watch on your desktop. Only the figure is visible: there's no window frame, background or toolbar. He stays quietly above your other windows and says a few words only when you ask.
 
 Built with Tauri 2, React and TypeScript. Runs fully offline.
@@ -108,11 +110,9 @@ The export writes:
 - `src/assets/knight.png`: the 1× sprite with a baked, pixel-stepped contact shadow in 3 rows below his feet.
 - `src-tauri/assets/knight.hitmask.bin` and `knight.meta.json`: a 1-bit mask of the figure (one bit per sprite pixel, shadow excluded) and his size and stance, for sizing, hit-testing and quote placement.
 - `out/icon-source.png`: the helm and shoulders for the app and tray icons.
+- `docs/knight.png`: the picture at the top of this README, at 4×.
 
-**Reference tooling.** The rest of `tools/asset-pipeline/` explored art directions and never touches the app's assets:
-
-- `extract.py` cuts the knight out of `docs/Battle-Worn Knight Amid Embers.png` with BiRefNet matting (`probe.py` compares models) into `out/knight.png`.
-- `styles.py` renders comparison sheets of the painting and the pixel knight's passes (`reference/` holds the earlier v1 and v2 sprites).
+Without `--export`, it writes both builds to `out/` (1× and 6×) for comparison. The scripts that explored other art directions (a cutout of the painting in `docs/`, stained glass, earlier sprites) were removed once D1 settled the style, and remain in the git history.
 
 ## Platform notes
 
