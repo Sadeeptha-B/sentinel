@@ -76,7 +76,7 @@ Breaking one of these causes a regression. Each is enforced by a test, or docume
 
 - `tools/asset-pipeline/pixel_knight.py` is the only source of the knight. Change the art there and regenerate (README → *The knight*). After `npx tauri icon`, delete `src-tauri/icons/android` and `src-tauri/icons/ios`.
 - The `.venv/` and `out/` folders are git-ignored. Recreate them from `requirements.txt` if they're missing.
-- `extract.py`, `probe.py`, `preview.py`, `styles.py` and `reference/` are reference tooling only. They never write the app's assets.
+- The export also writes `docs/knight.png`, the README picture, so commit it with the other assets.
 
 ## Verifying changes
 

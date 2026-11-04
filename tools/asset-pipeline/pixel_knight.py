@@ -32,6 +32,7 @@ W = 56
 HIP = 52  # rows below this stretch or squash with the build's leg length
 BAND_ROWS = 3  # rows below the feet for the contact shadow; knight.rs reads it from meta
 SHADOW = (8, 10, 18)
+README_SCALE = 4  # Medium at 100% scaling, the size he appears on screen by default
 
 
 def hexes(*cs):
@@ -359,6 +360,8 @@ def export(name: str) -> None:
     - src-tauri/assets/knight.meta.json: sizes and stance, for sizing, hit-testing and
       quote placement.
     - out/icon-source.png: helm and shoulders, for `npx tauri icon`.
+    - docs/knight.png: the sprite at README_SCALE, for the README. Written here so the
+      picture can't drift from the art.
     """
     sprite = np.asarray(build(name))
     h, w = sprite.shape[:2]
@@ -395,6 +398,10 @@ def export(name: str) -> None:
     icon = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
     icon.alpha_composite(head.resize((side * k, side * k), Image.NEAREST), ((1024 - side * k) // 2,) * 2)
     icon.save(OUT / "icon-source.png")
+
+    picture = Image.fromarray(image, "RGBA")
+    picture = picture.resize((w * README_SCALE, (h + BAND_ROWS) * README_SCALE), Image.NEAREST)
+    picture.save(ROOT / "docs" / "knight.png", optimize=True)
     print(f"exported {name}: sprite {w}x{h} + {BAND_ROWS} shadow rows")
 
 
