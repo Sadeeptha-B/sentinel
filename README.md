@@ -21,7 +21,8 @@ Then run `src-tauri/target/release/bundle/nsis/Sentinel_0.1.0_x64-setup.exe`:
 - **No warning:** Windows doesn't warn about the unsigned installer, because you built it yourself and didn't download it.
 - **MSI:** the build also writes an `.msi` to `bundle/msi/`. You don't need it.
 - **Without installing:** `src-tauri/target/release/sentinel.exe` runs on its own, because the app is self-contained and Windows 11 already includes WebView2.
-- **Updating:** rebuild and run the new installer over the old one. Your settings are kept.
+- **Updating:** rebuild and run the new installer over the old one. Your settings are kept. `npm run install-local` does both: it builds the installer and runs it silently, and restarts the knight if he was running. A failed build leaves the installed knight as he was.
+- **Updating on every pull:** run `git config core.hooksPath scripts/hooks` once. After that, a `git pull` that brings new commits into `main` runs `npm run install-local`, and the pull waits for it to finish. `SENTINEL_NO_INSTALL=1 git pull` skips it for one pull. A local `git merge` into `main` runs it too. `git pull --rebase` runs it only when the pull is a fast-forward; it doesn't run when the pull rebases commits of your own.
 - **Starting with Windows:** press Win+R, enter `shell:startup`, and put a shortcut to Sentinel in the folder that opens.
 - **Uninstalling:** Settings → Apps → Installed apps → Sentinel. Your settings stay in `%APPDATA%\dev.sentinel.app\` unless you tick the uninstaller's option to delete the app data. Delete any Startup shortcut you made yourself.
 
@@ -93,6 +94,7 @@ Other docs:
 - `src-tauri/src/{menu,tray,settings}.rs`: context menu, tray, persistence.
 - `src/Knight.tsx`: the sprite, click vs drag, resize input.
 - `src/Whisper.tsx`, `src/quotes.ts`: the quote window and library.
+- `scripts/install-local.ps1`, `scripts/hooks/post-merge`: build and reinstall, by hand or on every pull into `main`.
 
 ### The knight
 

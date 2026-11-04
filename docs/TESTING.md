@@ -42,6 +42,7 @@ Unit tests can't see transparency, DPI changes, click-through or the tray, so ch
 | Stand Watch line (D14) | "I stand ready." stays. A quote replaces it, then it fades back in. A drag or Ctrl+wheel resize hides it, and it returns at his new spot within a second of him settling. Hide hides it, and a second launch brings it back. It's there at launch when Stand Watch was saved on. With Always on Top off it sits directly above him and goes behind other windows with him; turning it back on makes it topmost again. Stand Down shows the farewell line, which fades for good. |
 | Stand Watch line after a right-click | At the default spot, with the line over his lower half, right-clicking him and pressing Esc leaves the line's window directly above his, with Always on Top on and off. With it off, neither window is topmost, and an ordinary window opened over him covers both. |
 | Dev build alongside the installed knight | Both run. The dev knight has its own settings and its tray tooltip says "Sentinel (dev)". |
+| Install on pull | With the hook enabled and the installed knight running, a pull of a new commit into `main` builds, reinstalls and restarts him (`/S /NS /R`), with his settings and Stand Watch line kept. No desktop shortcut appears, and the Start menu and Startup shortcuts stay. With him not running, `npm run install-local` installs without starting him. A failing build stops before the installer, leaving the installed `sentinel.exe` unchanged. |
 
 ### Outstanding
 
@@ -61,6 +62,7 @@ Unit tests can't see transparency, DPI changes, click-through or the tray, so ch
 - **Stand Watch line, idle CPU:** measure it in a release build with the line showing. The debug build read 0.05–0.55% of one core both with and without the line, which is noise at that level.
 - **Stand Watch line, old spot:** after a drag, check frame by frame that the line never flashes where he was. The sampled checks couldn't see a single frame.
 - **Linux:** X11 and Wayland (GNOME and KDE). CI only shows that it builds and passes the unit tests there; nobody has run the app. Record the actual behaviour in the README's platform notes.
+- **Install on pull, fresh-installer check:** since the row under *Passed*, `install-local.ps1` only uses an installer written during its own run. Run `npm run install-local` once with a real build and check that it still finds the installer and installs. Stubbed runs show that it does, and that it refuses an older leftover installer.
 
 ### How to run live checks
 
