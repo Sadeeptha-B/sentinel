@@ -144,12 +144,12 @@ Format: **what** was decided, **why**, the **alternatives** rejected, and anythi
 - **Why:** with one owner and no other contributors, a PR for every change costs more than it gives. Separate areas still get their own PR, so each can be reviewed, merged or reverted alone. Commits land on `main` as written, so each one should be reviewable, bisectable and revertable on its own.
 - **Alternatives rejected:** a branch per change (D13), which split closely related work, such as the install-on-pull hook and the CI installer, into separate PRs.
 
-### D18. Passive mode fades him to 50%
+### D18. Passive mode fades him to 60%
 *2026-11-05 · Active · Extends D4*
 
 - **What:**
-  - While Passive is on, the figure is drawn at 50% opacity, so what's beneath him shows through.
+  - While Passive is on, the figure is drawn at 60% opacity, so what's beneath him shows through.
   - He fades into and out of it with the same 0.9 s fade he appears with at launch, including at launch when Passive was saved on.
   - Lines (quotes, the lock lines, Stand Watch's line) stay at full strength.
-- **Why:** the owner's request. Clicks already passed through him, but he still hid what he stood over, so Passive was only half useful. At 50%, text beneath him stays readable while he is still plainly there.
-- **Alternatives rejected:** leaving him opaque (D4 as it was); 40%, which the owner found a touch too faint; fading the lines too, which would make them hard to read for no gain, as the line window already passes every click through; setting the window's alpha natively, which would need Windows-only code for what the page's opacity already does on both platforms.
+- **Why:** the owner's request. Clicks already passed through him, but he still hid what he stood over, so Passive was only half useful. His presence matters as much as what's beneath him: at 60% he still reads as a solid figure, while text beneath him stays readable over dark and light backgrounds.
+- **Alternatives rejected:** leaving him opaque (D4 as it was); 40%, which the owner found a touch too faint; 50%, which the owner compared with 60% over dark and light backgrounds and found weakened his presence; fading the lines too, which would make them hard to read for no gain, as the line window already passes every click through; setting the window's alpha natively, which would need Windows-only code for what the page's opacity already does on both platforms.
