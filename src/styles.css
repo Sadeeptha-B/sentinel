@@ -53,10 +53,12 @@ body {
 
 .whisper {
   position: absolute;
-  inset-inline: 0;
-  width: fit-content;
+  /* Set by the page under his stance, which is off the window's middle near a screen
+     edge. Its width mustn't depend on where it's placed, so it can be measured first. */
+  left: 0;
+  width: max-content;
   max-width: 300px;
-  margin: 0 auto;
+  margin: 0;
   opacity: 0;
   isolation: isolate;
   text-align: center;

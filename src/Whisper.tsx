@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { lineLeft } from "./align";
 import { pickQuote } from "./quotes";
 import * as ipc from "./ipc";
 
@@ -55,6 +56,27 @@ function WhisperLine({ line, onGone }: { line: Line; onGone: (seq: number) => vo
   const ref = useRef<HTMLParagraphElement>(null);
   const main = useRef<Animation | null>(null);
 
+  // Set the words under his stance before they're first painted. Wrapped words are
+  // narrower than their box, so they're measured by their own span. Placed again if
+  // their size changes, as when the typeface loads after a first line was laid out
+  // without it.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const words = el?.firstElementChild;
+    const stage = el?.parentElement;
+    if (!el || !words || !stage) return;
+    const place = () => {
+      const text = words.getBoundingClientRect().width;
+      el.style.left = `${lineLeft(line.anchorX, text, el.offsetWidth, stage.clientWidth)}px`;
+    };
+    place();
+    const resized = new ResizeObserver(place);
+    resized.observe(el);
+    // A wrapped line's box can keep its size while its words change width.
+    void document.fonts.ready.then(place);
+    return () => resized.disconnect();
+  }, [line.anchorX]);
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -108,7 +130,7 @@ function WhisperLine({ line, onGone }: { line: Line; onGone: (seq: number) => vo
 
   return (
     <p ref={ref} className={`whisper ${line.placement}`} style={{ fontSize: `${line.fontPx}px` }}>
-      {line.text}
+      <span>{line.text}</span>
     </p>
   );
 }
