@@ -84,7 +84,7 @@ Breaking one of these causes a regression. Each is enforced by a test, or docume
 - **CI:** the same checks run on Windows and Linux for every PR, and must pass before merging. Don't weaken or skip a CI step to get a change through. Code under `cfg(windows)` has a Linux fallback, so check that the Linux job passes too.
 - **Rust version:** pinned in `rust-toolchain.toml`. Bump it in its own commit, together with any clippy fixes the new version needs.
 - **Live checks:** a change to windows, DPI, click-through, the tray or menus also needs one. Ask the owner before driving their mouse or keyboard.
-- **Reporting:** say plainly what was verified and what wasn't. Add anything unverified to *Outstanding* in `docs/TESTING.md`.
+- **Reporting:** say plainly what was verified and what wasn't. Add anything unverified to *Outstanding* in `docs/TESTING.md`. When a live check passes, move it to *Passed* or update its row, with today's date as *Last passed*.
 
 ## Git
 

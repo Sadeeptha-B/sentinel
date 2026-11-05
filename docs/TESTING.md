@@ -4,7 +4,7 @@
 
 Run all of these before every commit. All of them must pass, and clippy must report no warnings.
 
-CI (`.github/workflows/ci.yml`) runs the same checks on every pull request and on every push to `main`, on Windows and on Linux, with clippy at `-D warnings`. `main` is protected, so both checks jobs must pass before merging. After they pass on a push to `main`, a third job builds the Windows installer and keeps it as a workflow artifact for 14 days (README → *Downloading a build*). The Rust version is pinned in `rust-toolchain.toml` so that local builds and CI agree.
+CI (`.github/workflows/ci.yml`) runs the same checks on every pull request and on every push to `main`, on Windows and on Linux, with clippy at `-D warnings`. `main` is protected, so both checks jobs must pass before merging. After they pass on a push to `main`, a third job builds the Windows installer and keeps it as a workflow artifact (README → *Downloading a build*). The Rust version is pinned in `rust-toolchain.toml` so that local builds and CI agree.
 
 ```sh
 npm test                                     # Vitest: quote picker, wheel steps
@@ -25,24 +25,26 @@ Unit tests can't see transparency, DPI changes, click-through or the tray, so ch
 
 ### Passed (Windows 11, two monitors)
 
-| Area | Expected |
-|---|---|
-| Rendering | Crisp at 3×, 4× and 5×. No visible rectangle. |
-| Quote | Shown over his lower half when he's low on screen, below his feet when there's room. Hides by itself. |
-| Drag | Moves him, doesn't trigger a quote, saves the position. |
-| Resize | Ctrl+wheel and Ctrl+= / Ctrl+- step one `k` at a time. |
-| Menu | Size check marks track `k`. Large and Small work. |
-| Click-through | His helm, chest and blade catch clicks. The corners and the shadow pass them through. |
-| Stand Watch / Stand Down | The messages appear. |
-| Hide / Passive | `Ctrl+Alt+K` recovers both. |
-| Tray | Left-click toggles visibility. The menu is correct. Reset Position puts him bottom-right. |
-| Exit and relaunch | Position and size are restored. |
-| Second launch | Summons the running instance, with no duplicate. |
-| Idle CPU | 0.00% |
-| Stand Watch line (D14) | "I stand ready." stays. A quote replaces it, then it fades back in. A drag or Ctrl+wheel resize hides it, and it returns at his new spot within a second of him settling. Hide hides it, and a second launch brings it back. It's there at launch when Stand Watch was saved on. With Always on Top off it sits directly above him and goes behind other windows with him; turning it back on makes it topmost again. Stand Down shows the farewell line, which fades for good. |
-| Stand Watch line after a right-click | At the default spot, with the line over his lower half, right-clicking him and pressing Esc leaves the line's window directly above his, with Always on Top on and off. With it off, neither window is topmost, and an ordinary window opened over him covers both. |
-| Dev build alongside the installed knight | Both run. The dev knight has its own settings and its tray tooltip says "Sentinel (dev)". |
-| Install on pull | With the hook enabled and the installed knight running, a pull of a new commit into `main` builds, reinstalls and restarts him (`/S /NS /R`), with his settings and Stand Watch line kept. No desktop shortcut appears, and the Start menu and Startup shortcuts stay. With him not running, `npm run install-local` installs without starting him. A failing build stops before the installer, leaving the installed `sentinel.exe` unchanged. |
+When a check passes, set its *Last passed* date, so a result older than later changes in that area shows. `git log --since=<date> -- <paths>` on `main` lists what has changed since. It's a date rather than a commit, because live checks run on a branch before merging, and rebase-merging rewrites those commits. Rows dated 2026-11-03 were carried over when this file was created, and may have passed earlier.
+
+| Area | Expected | Last passed |
+|---|---|---|
+| Rendering | Crisp at 3×, 4× and 5×. No visible rectangle. | 2026-11-03 |
+| Quote | Shown over his lower half when he's low on screen, below his feet when there's room. Hides by itself. | 2026-11-03 |
+| Drag | Moves him, doesn't trigger a quote, saves the position. | 2026-11-03 |
+| Resize | Ctrl+wheel and Ctrl+= / Ctrl+- step one `k` at a time. | 2026-11-03 |
+| Menu | Size check marks track `k`. Large and Small work. | 2026-11-03 |
+| Click-through | His helm, chest and blade catch clicks. The corners and the shadow pass them through. | 2026-11-03 |
+| Stand Watch / Stand Down | The messages appear. | 2026-11-03 |
+| Hide / Passive | `Ctrl+Alt+K` recovers both. | 2026-11-03 |
+| Tray | Left-click toggles visibility. The menu is correct. Reset Position puts him bottom-right. | 2026-11-03 |
+| Exit and relaunch | Position and size are restored. | 2026-11-03 |
+| Second launch | Summons the running instance, with no duplicate. | 2026-11-03 |
+| Idle CPU | 0.00% | 2026-11-03 |
+| Stand Watch line (D14) | "I stand ready." stays. A quote replaces it, then it fades back in. A drag or Ctrl+wheel resize hides it, and it returns at his new spot within a second of him settling. Hide hides it, and a second launch brings it back. It's there at launch when Stand Watch was saved on. With Always on Top off it sits directly above him and goes behind other windows with him; turning it back on makes it topmost again. Stand Down shows the farewell line, which fades for good. | 2026-11-04 |
+| Stand Watch line after a right-click | At the default spot, with the line over his lower half, right-clicking him and pressing Esc leaves the line's window directly above his, with Always on Top on and off. With it off, neither window is topmost, and an ordinary window opened over him covers both. | 2026-11-04 |
+| Dev build alongside the installed knight | Both run. The dev knight has its own settings and its tray tooltip says "Sentinel (dev)". | 2026-11-04 |
+| Install on pull | With the hook enabled and the installed knight running, a pull of a new commit into `main` builds, reinstalls and restarts him (`/S /NS /R`), with his settings and Stand Watch line kept. No desktop shortcut appears, and the Start menu and Startup shortcuts stay. With him not running, `npm run install-local` installs without starting him. A failing build stops before the installer, leaving the installed `sentinel.exe` unchanged. | 2026-11-05 |
 
 ### Outstanding
 
