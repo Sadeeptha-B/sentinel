@@ -88,7 +88,7 @@ Breaking one of these causes a regression. Each is enforced by a test, or docume
 
 ## Git
 
-- **Branches:** branch from an up-to-date `main`, one branch per change.
+- **Branches:** branch from an up-to-date `main`. Each large feature, separate product area or markedly different piece of work gets its own branch and PR (D17). Smaller related changes can share a branch, as separate commits.
 - **Commits:**
   - Small, and each one builds and passes.
   - Messages say what changed and why.
