@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 // The sprite (with its baked contact shadow) is written by
 // tools/asset-pipeline/pixel_knight.py --export.
 import sprite from "./assets/knight.png";
+import { follow } from "./follow";
 import * as ipc from "./ipc";
 import { LINE, wheelSteps } from "./wheel";
 
@@ -27,16 +28,20 @@ function alphaMap(img: HTMLImageElement) {
 
 export function Knight() {
   const [ready, setReady] = useState(false);
+  const [passive, setPassive] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const solidAt = useRef<((fx: number, fy: number) => boolean) | null>(null);
   const locked = useRef(false);
   const press = useRef<{ x: number; y: number } | null>(null);
 
-  useEffect(() => {
-    void ipc.uiState().then((s) => (locked.current = s.locked));
-    const unlisten = ipc.onUiState((s) => (locked.current = s.locked));
-    return () => void unlisten.then((f) => f());
-  }, []);
+  useEffect(
+    () =>
+      follow(ipc.onUiState, ipc.uiState, (s) => {
+        locked.current = s.locked;
+        setPassive(s.passive);
+      }),
+    [],
+  );
 
   // Ctrl+wheel and Ctrl +/- resize in whole pixel-scale steps, at most one request
   // per frame. Rust refuses them while he's locked, and tells the user so.
@@ -125,7 +130,7 @@ export function Knight() {
         if (onFigure(e as unknown as PointerEvent)) void ipc.openContextMenu();
       }}
     >
-      <div className={ready ? "figure ready" : "figure"}>
+      <div className={["figure", ready && "ready", passive && "passive"].filter(Boolean).join(" ")}>
         <img
           ref={imgRef}
           className="knight"
