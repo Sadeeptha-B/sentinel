@@ -4,7 +4,7 @@
 
 Run all of these before every commit. All of them must pass, and clippy must report no warnings.
 
-CI (`.github/workflows/ci.yml`) runs the same checks on every pull request and on every push to `main`, on Windows and on Linux, with clippy at `-D warnings`. `main` is protected, so both jobs must pass before merging. The Rust version is pinned in `rust-toolchain.toml` so that local builds and CI agree.
+CI (`.github/workflows/ci.yml`) runs the same checks on every pull request and on every push to `main`, on Windows and on Linux, with clippy at `-D warnings`. `main` is protected, so both checks jobs must pass before merging. After they pass on a push to `main`, a third job builds the Windows installer and keeps it as a workflow artifact for 14 days (README → *Downloading a build*). The Rust version is pinned in `rust-toolchain.toml` so that local builds and CI agree.
 
 ```sh
 npm test                                     # Vitest: quote picker, wheel steps
@@ -59,6 +59,7 @@ Unit tests can't see transparency, DPI changes, click-through or the tray, so ch
   3. Confirm the window is `58k × 96k` on each side, with `k` switching between 4 (100%) and 5 (125%) at the default size.
   4. Confirm his size is the same after the round trip.
 - **Installers:** run `npm run tauri build`, install, and check the first-launch default (bottom-right, 4× at 100%). Also check that the installer runs without a SmartScreen prompt, that `sentinel.exe` runs without installing, that reinstalling keeps settings, and that uninstalling keeps them unless the app-data box is ticked.
+- **CI installer:** the job runs only on a push to `main`, so it can't be tried on a PR. After the first push to `main`, check that it uploads `sentinel-setup-<commit>`, and that the downloaded installer shows the SmartScreen prompt the README describes, then installs and runs. Two pushes in quick succession should each get their own run and installer.
 - **Stand Watch line, idle CPU:** measure it in a release build with the line showing. The debug build read 0.05–0.55% of one core both with and without the line, which is noise at that level.
 - **Stand Watch line, old spot:** after a drag, check frame by frame that the line never flashes where he was. The sampled checks couldn't see a single frame.
 - **Linux:** X11 and Wayland (GNOME and KDE). CI only shows that it builds and passes the unit tests there; nobody has run the app. Record the actual behaviour in the README's platform notes.
