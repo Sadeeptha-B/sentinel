@@ -1,6 +1,6 @@
 # The automated checks from docs/TESTING.md, on Windows (the primary target) and
 # Linux (where the build would otherwise break silently: stage.rs and ticker.rs
-# have Windows-only branches).
+# have Windows-only branches). Each push to main also builds the Windows installer.
 name: CI
 
 on:
@@ -12,8 +12,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  # A new push supersedes a PR's earlier run, but every commit on main gets checked.
+  # A new push supersedes a PR's earlier run. Each push to main gets a group of its
+  # own: a shared group keeps only one pending run, so a third quick push would drop
+  # the second's checks and installer.
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -64,3 +66,39 @@ jobs:
         run: cargo clippy --all-targets --manifest-path src-tauri/Cargo.toml -- -D warnings
       - name: Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  # An installer for every push to main, from its newest commit, kept as a
+  # workflow artifact (D16).
+  # Needs both checks jobs, so a commit that fails on either OS gets no installer.
+  # Not run for PRs: a release build adds minutes, and the checks already compile.
+  installer:
+    name: Windows installer
+    needs: checks
+    if: github.event_name == 'push'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+
+      - name: Install Rust toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # NSIS only: the MSI isn't needed (README → Installing).
+      - name: Build the installer
+        run: npm run tauri build -- --bundles nsis
+
+      - uses: actions/upload-artifact@v4
+        with:
+          # The app version doesn't change per commit, so the commit names the build.
+          name: sentinel-setup-${{ github.sha }}
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+          retention-days: 14

@@ -122,3 +122,13 @@ Format: **what** was decided, **why**, the **alternatives** rejected, and anythi
 - **What:** IM Fell English (regular, upright) in the same muted gold, with the same feathered shadow and no card or bubble. Its size is 5.25% of his height, between 17 and 27 px, about 5% larger than before, because its x-height is small.
 - **Why:** the owner's choice from a comparison sheet of seven styles over dark, light and busy backgrounds. The old-press texture suits a weathered knight, and upright type reads steadier than the italic.
 - **Alternatives rejected:** EB Garamond italic (D6), upright, upright small caps and upright in soft white; Cinzel capitals; Cormorant Garamond.
+
+### D16. CI builds an unsigned Windows installer for every push to `main`
+*2026-11-05 · Active*
+
+- **What:**
+  - After the checks pass on a push to `main`, CI builds the NSIS installer and keeps it as a workflow artifact for 14 days. Pull requests don't build one.
+  - Windows only, and unsigned: a downloaded build shows the SmartScreen prompt, and the README says how to get past it.
+  - Building locally stays the usual way to install: `npm run install-local`, or the hook that runs it on every pull into `main`. The artifact is for when that isn't convenient.
+- **Why:** the owner wanted a ready-made installer for each merge without building it by hand. An artifact needs no release process, version bump or write permission, and old builds expire on their own.
+- **Alternatives rejected:** a GitHub Release for every merge, which would be noisy at a fixed version; tagged releases, which can come later if versioned builds are needed; code signing, which costs money and isn't needed for one owner; Linux packages, which would ship untested builds (D11); an installer for every PR, which would add minutes per push; an installer for every commit in a push, which would mean several release builds per merge for commits nobody installs.

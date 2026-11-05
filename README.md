@@ -18,7 +18,7 @@ npm run tauri build
 Then run `src-tauri/target/release/bundle/nsis/Sentinel_0.1.0_x64-setup.exe`:
 
 - **The installer:** it installs for your user only, needs no admin rights, and adds Sentinel to the Start menu.
-- **No warning:** Windows doesn't warn about the unsigned installer, because you built it yourself and didn't download it.
+- **No warning:** Windows doesn't warn about the unsigned installer, because you built it yourself and didn't download it. A [downloaded build](#downloading-a-build) does warn.
 - **MSI:** the build also writes an `.msi` to `bundle/msi/`. You don't need it.
 - **Without installing:** `src-tauri/target/release/sentinel.exe` runs on its own, because the app is self-contained and Windows 11 already includes WebView2.
 - **Updating:** rebuild and run the new installer over the old one. Your settings are kept. `npm run install-local` does both: it builds the installer and runs it silently, and restarts the knight if he was running. A failed build leaves the installed knight as he was.
@@ -27,6 +27,16 @@ Then run `src-tauri/target/release/bundle/nsis/Sentinel_0.1.0_x64-setup.exe`:
 - **Uninstalling:** Settings → Apps → Installed apps → Sentinel. Your settings stay in `%APPDATA%\dev.sentinel.app\` unless you tick the uninstaller's option to delete the app data. Delete any Startup shortcut you made yourself.
 
 On Linux, the same build writes `.deb`, `.rpm` and AppImage packages under `bundle/`. Linux is untested; see [Platform notes](#platform-notes).
+
+### Downloading a build
+
+CI builds the Windows installer for every push to `main`, from its newest commit. To get one without building it yourself:
+
+1. On GitHub, open **Actions**, then the latest **CI** run on `main`.
+2. Under **Artifacts**, download `sentinel-setup-<commit>`. You need to be signed in to GitHub, and each build is kept for 14 days.
+3. Extract the zip and run the installer inside.
+
+The installer is unsigned and came from the internet, so Windows SmartScreen says "Windows protected your PC". Choose **More info**, then **Run anyway**. Or, before extracting, right-click the zip → **Properties** → tick **Unblock**.
 
 ## Using him
 
