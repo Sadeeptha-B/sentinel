@@ -2,7 +2,7 @@
 
 Choices the owner has made about Sentinel, and why. Read this before proposing a change in any of these areas: each entry is settled until the owner reopens it.
 
-- **This file only grows.** Add new entries at the bottom. When a decision that is already on `main` changes, set the old entry's status to `Superseded by D<n>` and write a new entry, rather than rewriting history.
+- **This file only grows.** Add new entries at the bottom. When a decision that is already on `main` changes, set the old entry's status to `Superseded by D<n>`, and end its heading with `(superseded by D<n>)` so it shows when skimming. Then write a new entry, rather than rewriting history. Once superseded entries are about a third of the file, move them to `DECISIONS-archive.md`, keeping their numbers.
 - **On a branch, iterate in place.** An entry that exists only on an unmerged branch is a draft. While the owner is still deciding, edit it directly instead of stacking superseded entries for choices that never shipped. If an earlier option was tried on the branch and rejected, list it under the entry's *alternatives*. Superseding starts once the entry is on `main`.
 - **An entry is a choice that could reasonably have gone another way**: product behaviour, art direction, scope, platform support, workflow. Correctness rules that must hold are *invariants*, not decisions; they live in the code and tests and are indexed in [`AGENTS.md`](../AGENTS.md).
 - The product brief, [`sentinel.md`](sentinel.md), is the baseline. Record a decision here when it departs from, narrows or interprets the brief.
@@ -42,7 +42,7 @@ Format: **what** was decided, **why**, the **alternatives** rejected, and anythi
 - **What:** two stepped alpha levels in 3 rows below his feet. No window glows or other effects. The cloak's cool rim light is part of the art.
 - **Why:** the brief's visual dignity (§3.4).
 
-### D6. Quote typography
+### D6. Quote typography (superseded by D15)
 *2026-11-03 · Superseded by D15*
 
 - **What:** EB Garamond italic in muted gold, with a feathered dark shadow and no card or bubble.
@@ -98,7 +98,7 @@ Format: **what** was decided, **why**, the **alternatives** rejected, and anythi
   - Session handoff notes aren't tracked.
 - **Why:** each fact lives in one place, as close as possible to what it describes.
 
-### D13. Git workflow
+### D13. Git workflow (superseded by D17)
 *2026-11-03 · Superseded by D17*
 
 - **What:** a branch per change, with small commits that each build and pass. The owner rebase-merges PRs, and merges, pushes and branch deletions need the owner's go-ahead.
@@ -127,9 +127,10 @@ Format: **what** was decided, **why**, the **alternatives** rejected, and anythi
 *2026-11-05 · Active*
 
 - **What:**
-  - After the checks pass on a push to `main`, CI builds the NSIS installer and keeps it as a workflow artifact for 14 days. Pull requests don't build one.
-  - Windows only, and unsigned: a downloaded build shows the SmartScreen prompt, and the README says how to get past it.
-  - Building locally stays the usual way to install: `npm run install-local`, or the hook that runs it on every pull into `main`. The artifact is for when that isn't convenient.
+  - CI builds the installer for every push to `main`, from its newest commit, and keeps it as a short-lived workflow artifact. A rebase-merged PR is one push, so it gets one installer. Pull requests don't build one.
+  - Windows only, and unsigned, so a downloaded build shows SmartScreen.
+  - Building locally stays the usual way to install. The artifact is for when that isn't convenient.
+  - The job is in `ci.yml`; downloading and SmartScreen are in the README (*Downloading a build*).
 - **Why:** the owner wanted a ready-made installer for each merge without building it by hand. An artifact needs no release process, version bump or write permission, and old builds expire on their own.
 - **Alternatives rejected:** a GitHub Release for every merge, which would be noisy at a fixed version; tagged releases, which can come later if versioned builds are needed; code signing, which costs money and isn't needed for one owner; Linux packages, which would ship untested builds (D11); an installer for every PR, which would add minutes per push; an installer for every commit in a push, which would mean several release builds per merge for commits nobody installs.
 
