@@ -49,7 +49,7 @@ The installer is unsigned and came from the internet, so Windows SmartScreen say
 | Summon Sentinel | `Ctrl+Alt+K` shows him, ends Passive mode and brings him back on screen |
 
 - **Click-through.** Clicks only land on Sentinel himself. Transparent pixels around him pass clicks to the window underneath.
-- **Passive mode** makes Sentinel fully click-through, and fades him to half strength so you can see what's beneath him. Undo it from the tray menu or with `Ctrl+Alt+K`.
+- **Passive mode** makes Sentinel fully click-through, and fades him to 60% so you can see what's beneath him. Undo it from the tray menu or with `Ctrl+Alt+K`.
 - **Quotes** appear beneath Sentinel's feet when there's room, otherwise over his lower half (for example while he stands on the taskbar). They stay centred on him near a screen edge too, moving aside only as far as keeping them on screen needs. They fade in, then fade out on their own. Nothing appears unless you ask.
 - **Lock Position** stops Sentinel being dragged or resized (the Size menu greys out). He says "I hold this ground." when you lock him, and again if you try to move or resize him while he's locked.
 - **Stand Watch** is symbolic only. There are no timers and nothing is tracked. While Sentinel stands watch, "I stand ready." stays by him. A quote or lock line takes its place for a few seconds, and it returns once he's still again. Stand Down clears it.
