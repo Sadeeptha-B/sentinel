@@ -10,6 +10,8 @@ export type WhisperRequest = {
   seq: number;
   text: string | null;
   placement: Placement;
+  /** Centre of his stance in px from the window's left; the words are set there. */
+  anchorX: number;
   fontPx: number;
   stay: boolean;
 };

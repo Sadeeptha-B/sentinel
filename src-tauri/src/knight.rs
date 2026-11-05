@@ -196,8 +196,11 @@ pub enum Placement {
 
 /// Where the quote window goes: centred on his stance, below his feet when the work
 /// area has room for it, otherwise over the lower half of the figure (as when he
-/// stands on the taskbar).
-pub fn whisper_rect(knight: Rect, work: Rect, w: f64, h: f64) -> (Rect, Placement) {
+/// stands on the taskbar). Also returns the centre of his stance in px from the
+/// window's left edge: the window is kept inside the work area, so near a screen edge
+/// it sits off-centre, and the words must be set at this anchor, not the window's
+/// middle, or they drift sideways away from him.
+pub fn whisper_rect(knight: Rect, work: Rect, w: f64, h: f64) -> (Rect, Placement, f64) {
     let fig_h = figure_height(knight.h);
     let centre = knight.x + knight.w * (META.feet_left + META.feet_right) / 2.0;
     let below = knight.y + fig_h * 0.985;
@@ -206,9 +209,9 @@ pub fn whisper_rect(knight: Rect, work: Rect, w: f64, h: f64) -> (Rect, Placemen
     } else {
         (knight.y + fig_h * 0.72 - h / 2.0, Placement::Over)
     };
-    let x = (centre - w / 2.0).clamp(work.x, (work.right() - w).max(work.x));
+    let x = (centre - w / 2.0).clamp(work.x, (work.right() - w).max(work.x)).round();
     let y = y.clamp(work.y, (work.bottom() - h).max(work.y));
-    (Rect::new(x.round(), y.round(), w, h), placement)
+    (Rect::new(x, y.round(), w, h), placement, centre - x)
 }
 
 #[cfg(test)]
@@ -327,14 +330,35 @@ mod tests {
     fn whisper_goes_below_when_there_is_room_else_over_his_lower_half() {
         let work = Rect::new(0.0, 0.0, 1920.0, 1032.0);
         let standing_mid = Rect::new(1000.0, 300.0, 240.0, 412.0);
-        let (r, placement) = whisper_rect(standing_mid, work, 420.0, 150.0);
+        let (r, placement, _) = whisper_rect(standing_mid, work, 420.0, 150.0);
         assert_eq!(placement, Placement::Below);
         assert!(r.y >= standing_mid.y + figure_height(412.0) * 0.98);
 
         let on_taskbar = default_rect(work, 240.0, 412.0, 24.0);
-        let (r, placement) = whisper_rect(on_taskbar, work, 420.0, 150.0);
+        let (r, placement, _) = whisper_rect(on_taskbar, work, 420.0, 150.0);
         assert_eq!(placement, Placement::Over);
         assert!(r.y > on_taskbar.y + on_taskbar.h * 0.4, "lower half");
         assert!(r.right() <= work.right(), "kept on screen");
+    }
+
+    #[test]
+    fn whisper_anchor_follows_his_stance_when_the_window_is_kept_on_screen() {
+        let work = Rect::new(0.0, 0.0, 1920.0, 1032.0);
+        let (w, h) = window_px(4);
+        let stance = |k: Rect| k.x + k.w * (META.feet_left + META.feet_right) / 2.0;
+        let mid = Rect::new(1000.0, 300.0, w, h);
+        let left = Rect::new(0.0, 300.0, w, h);
+        let right = Rect::new(work.right() - w, 300.0, w, h);
+        for knight in [mid, left, right] {
+            let (r, _, anchor) = whisper_rect(knight, work, 420.0, 150.0);
+            assert!(r.x >= work.x && r.right() <= work.right(), "kept on screen");
+            assert!((r.x + anchor - stance(knight)).abs() < 1e-9, "anchored on his stance");
+        }
+        let (_, _, anchor) = whisper_rect(mid, work, 420.0, 150.0);
+        assert!((anchor - 210.0).abs() <= 0.5, "centred when there's room");
+        let (_, _, anchor) = whisper_rect(left, work, 420.0, 150.0);
+        assert!(anchor < 210.0, "off-centre towards him at the left edge");
+        let (_, _, anchor) = whisper_rect(right, work, 420.0, 150.0);
+        assert!(anchor > 210.0, "off-centre towards him at the right edge");
     }
 }

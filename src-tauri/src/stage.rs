@@ -57,6 +57,9 @@ struct WhisperPayload {
     /// `None` asks the whisper window to choose a quote itself.
     text: Option<String>,
     placement: Placement,
+    /// Where the words are centred, in CSS px from the window's left edge: under his
+    /// stance, which is off the window's middle when he stands near a screen edge.
+    anchor_x: f64,
     font_px: f64,
     /// Stays until a newer line replaces it or the window is hidden (the Stand Watch
     /// line, D14), instead of fading out by itself.
@@ -519,7 +522,7 @@ fn show_line(app: &AppHandle, text: Option<&str>, stay: bool) -> Option<u64> {
     let rect = current_rect(app)?;
     let scale = dpi(app).unwrap_or(1.0);
     let work = screen_for(&knight, rect).map_or(rect, |s| s.work);
-    let (r, placement) =
+    let (r, placement, anchor) =
         knight::whisper_rect(rect, work, WHISPER_SIZE.0 * scale, WHISPER_SIZE.1 * scale);
     let _ = whisper.set_position(PhysicalPosition::new(r.x as i32, r.y as i32));
     let seq = st.whisper_seq.fetch_add(1, Ordering::Relaxed) + 1;
@@ -536,6 +539,7 @@ fn show_line(app: &AppHandle, text: Option<&str>, stay: bool) -> Option<u64> {
             seq,
             text: text.map(str::to_owned),
             placement,
+            anchor_x: anchor / scale,
             // IM Fell's small x-height reads about 5% smaller than other serifs.
             font_px: (s.height * 0.0525).clamp(17.0, 27.0),
             stay,

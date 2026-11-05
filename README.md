@@ -50,7 +50,7 @@ The installer is unsigned and came from the internet, so Windows SmartScreen say
 
 - **Click-through.** Clicks only land on Sentinel himself. Transparent pixels around him pass clicks to the window underneath.
 - **Passive mode** makes Sentinel fully click-through. Undo it from the tray menu or with `Ctrl+Alt+K`.
-- **Quotes** appear beneath Sentinel's feet when there's room, otherwise over his lower half (for example while he stands on the taskbar). They fade in, then fade out on their own. Nothing appears unless you ask.
+- **Quotes** appear beneath Sentinel's feet when there's room, otherwise over his lower half (for example while he stands on the taskbar). They stay centred on him near a screen edge too, moving aside only as far as keeping them on screen needs. They fade in, then fade out on their own. Nothing appears unless you ask.
 - **Lock Position** stops Sentinel being dragged or resized (the Size menu greys out). He says "I hold this ground." when you lock him, and again if you try to move or resize him while he's locked.
 - **Stand Watch** is symbolic only. There are no timers and nothing is tracked. While Sentinel stands watch, "I stand ready." stays by him. A quote or lock line takes its place for a few seconds, and it returns once he's still again. Stand Down clears it.
 - **Off screen.** If Sentinel's saved position is no longer on any screen (a monitor was unplugged, or the resolution changed), he returns to the bottom-right corner of the primary screen. The app checks this at launch and every few seconds after. Tray → **Reset Position** does the same on demand.
