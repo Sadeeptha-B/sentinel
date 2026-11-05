@@ -21,8 +21,7 @@ Then run `src-tauri/target/release/bundle/nsis/Sentinel_0.1.0_x64-setup.exe`:
 - **No warning:** Windows doesn't warn about the unsigned installer, because you built it yourself and didn't download it. A [downloaded build](#downloading-a-build) does warn.
 - **MSI:** the build also writes an `.msi` to `bundle/msi/`. You don't need it.
 - **Without installing:** `src-tauri/target/release/sentinel.exe` runs on its own, because the app is self-contained and Windows 11 already includes WebView2.
-- **Updating:** rebuild and run the new installer over the old one. Your settings are kept. `npm run install-local` does both: it builds the installer and runs it silently, and restarts the knight if he was running. A failed build leaves the installed knight as he was.
-- **Updating on every pull:** run `git config core.hooksPath scripts/hooks` once. After that, a `git pull` that brings new commits into `main` runs `npm run install-local`, and the pull waits for it to finish. `SENTINEL_NO_INSTALL=1 git pull` skips it for one pull. A local `git merge` into `main` runs it too. `git pull --rebase` runs it only when the pull is a fast-forward; it doesn't run when the pull rebases commits of your own.
+- **Updating:** rebuild and run the new installer over the old one. Your settings are kept. `npm run install-local` does both: it builds the installer and runs it silently, and restarts the knight if he was running. A failed build leaves the installed knight as he was. To do this on every pull, see [Updating on every pull](#updating-on-every-pull).
 - **Starting with Windows:** press Win+R, enter `shell:startup`, and put a shortcut to Sentinel in the folder that opens.
 - **Uninstalling:** Settings → Apps → Installed apps → Sentinel. Your settings stay in `%APPDATA%\dev.sentinel.app\` unless you tick the uninstaller's option to delete the app data. Delete any Startup shortcut you made yourself.
 
@@ -38,34 +37,24 @@ CI builds the Windows installer for every push to `main`, from its newest commit
 
 The installer is unsigned and came from the internet, so Windows SmartScreen says "Windows protected your PC". Choose **More info**, then **Run anyway**. Or, before extracting, right-click the zip → **Properties** → tick **Unblock**.
 
-## Using him
+## Using Sentinel
 
 | Action | How |
 | --- | --- |
-| Hear a few words | Click him |
-| Move him | Drag him |
-| Resize him (feet stay planted) | `Ctrl` + mouse wheel over him, `Ctrl` `+` / `Ctrl` `-`, or right-click → Size (Small / Medium / Large) |
-| Menu | Right-click him: Show Quote · Stand Watch / Stand Down · Size · Lock Position · Always on Top · Passive · Hide · Exit |
+| Hear a few words | Click Sentinel |
+| Move Sentinel | Drag him |
+| Resize Sentinel (feet stay planted) | `Ctrl` + mouse wheel over him, `Ctrl` `+` / `Ctrl` `-`, or right-click → Size (Small / Medium / Large) |
+| Menu | Right-click Sentinel: Show Quote · Stand Watch / Stand Down · Size · Lock Position · Always on Top · Passive · Hide · Exit |
 | Hide / show | Left-click the tray icon, or tray menu → Hide/Show Sentinel |
-| Summon him | `Ctrl+Alt+K` shows him, ends Passive mode and brings him back on screen |
+| Summon Sentinel | `Ctrl+Alt+K` shows him, ends Passive mode and brings him back on screen |
 
-- **Click-through.** Clicks only land on the knight himself. Transparent pixels around him pass clicks to the window underneath.
-- **Passive mode** makes him fully click-through. Undo it from the tray menu or with `Ctrl+Alt+K`.
-- **Quotes** appear beneath his feet when there's room, otherwise over his lower half (for example while he stands on the taskbar). They fade in, then fade out on their own. Nothing appears unless you ask.
-- **Lock Position** stops him being dragged or resized (the Size menu greys out). He says "I hold this ground." when you lock him, and again if you try to move or resize him while he's locked.
-- **Stand Watch** is symbolic only. There are no timers and nothing is tracked. While he stands watch, "I stand ready." stays by him. A quote or lock line takes its place for a few seconds, and it returns once he's still again. Stand Down clears it.
-- **Sizes are whole-number pixel scales.** He's pixel art, so each sprite pixel is always drawn as a crisp square block of screen pixels. Resizing steps between scales (Small, Medium and Large are 3×, 4× and 5× at 100% display scaling), and on displays with other scaling he snaps to the scale that gives about the same apparent size.
-
-### Settings
-
-Position, size, visibility, always-on-top, lock, passive and Stand Watch persist across restarts in `settings.json`:
-
-- Windows: `%APPDATA%\dev.sentinel.app\`
-- Linux: `~/.config/dev.sentinel.app/`
-
-To change the summon shortcut, edit `"shortcut"` there (for example `"Ctrl+Shift+F12"`) and restart.
-
-If a saved position is no longer on any screen (a monitor was unplugged, or the resolution changed), he returns to the bottom-right corner of the primary screen. The app checks this at launch and every few seconds after. Tray → **Reset Position** does the same on demand.
+- **Click-through.** Clicks only land on Sentinel himself. Transparent pixels around him pass clicks to the window underneath.
+- **Passive mode** makes Sentinel fully click-through. Undo it from the tray menu or with `Ctrl+Alt+K`.
+- **Quotes** appear beneath Sentinel's feet when there's room, otherwise over his lower half (for example while he stands on the taskbar). They fade in, then fade out on their own. Nothing appears unless you ask.
+- **Lock Position** stops Sentinel being dragged or resized (the Size menu greys out). He says "I hold this ground." when you lock him, and again if you try to move or resize him while he's locked.
+- **Stand Watch** is symbolic only. There are no timers and nothing is tracked. While Sentinel stands watch, "I stand ready." stays by him. A quote or lock line takes its place for a few seconds, and it returns once he's still again. Stand Down clears it.
+- **Off screen.** If Sentinel's saved position is no longer on any screen (a monitor was unplugged, or the resolution changed), he returns to the bottom-right corner of the primary screen. The app checks this at launch and every few seconds after. Tray → **Reset Position** does the same on demand.
+- **Settings** are kept between restarts. See [Settings](#settings) for where, and how to change the summon shortcut.
 
 ## Development
 
@@ -96,6 +85,19 @@ Other docs:
 - [`docs/DECISIONS.md`](docs/DECISIONS.md): the owner's decisions.
 - [`AGENTS.md`](AGENTS.md): conventions and invariants for anyone (or any agent) changing the code.
 
+### Updating on every pull
+
+Run `git config core.hooksPath scripts/hooks` once. After that, a `git pull` that brings new commits into `main` runs `scripts/install-local.ps1`, the same script as `npm run install-local`, and the pull waits for it to finish. `SENTINEL_NO_INSTALL=1 git pull` skips it for one pull. A local `git merge` into `main` runs it too. `git pull --rebase` runs it only when the pull is a fast-forward; it doesn't run when the pull rebases commits of your own.
+
+### Settings
+
+Position, size, visibility, always-on-top, lock, passive and Stand Watch persist across restarts in `settings.json`:
+
+- Windows: `%APPDATA%\dev.sentinel.app\`
+- Linux: `~/.config/dev.sentinel.app/`
+
+To change the summon shortcut, edit `"shortcut"` there (for example `"Ctrl+Shift+F12"`) and restart.
+
 ### Layout
 
 - `src-tauri/src/stage.rs`: windows, placement, feet-anchored resizing, toggles, recovery.
@@ -125,6 +127,8 @@ The export writes:
 - `docs/knight.png`: the picture at the top of this README, at 4×.
 
 Without `--export`, it writes both builds to `out/` (1× and 6×) for comparison. The scripts that explored other art directions (a cutout of the painting in `docs/`, stained glass, earlier sprites) were removed once D1 settled the style, and remain in the git history.
+
+**Sizes are whole-number pixel scales.** Sentinel is pixel art, so each sprite pixel is always drawn as a crisp square block of screen pixels. Resizing steps between scales (Small, Medium and Large are 3×, 4× and 5× at 100% display scaling), and on displays with other scaling he snaps to the scale that gives about the same apparent size.
 
 ## Platform notes
 
