@@ -33,6 +33,12 @@ body {
   opacity: 1;
 }
 
+/* Passive: clicks pass through him, so let the eye through too, enough to read what's
+   beneath while he's still plainly there (D18). The same fade carries him in and out. */
+.figure.ready.passive {
+  opacity: 0.5;
+}
+
 /* The window is an exact whole-number multiple of the sprite, so each sprite pixel
    maps to a crisp k×k block of screen pixels. */
 .knight {
