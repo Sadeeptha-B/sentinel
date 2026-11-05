@@ -99,7 +99,7 @@ Format: **what** was decided, **why**, the **alternatives** rejected, and anythi
 - **Why:** each fact lives in one place, as close as possible to what it describes.
 
 ### D13. Git workflow
-*2026-11-03 · Active*
+*2026-11-03 · Superseded by D17*
 
 - **What:** a branch per change, with small commits that each build and pass. The owner rebase-merges PRs, and merges, pushes and branch deletions need the owner's go-ahead.
 - **Why:** commits land on `main` as written, so each one should be reviewable, bisectable and revertable on its own.
@@ -132,3 +132,13 @@ Format: **what** was decided, **why**, the **alternatives** rejected, and anythi
   - Building locally stays the usual way to install: `npm run install-local`, or the hook that runs it on every pull into `main`. The artifact is for when that isn't convenient.
 - **Why:** the owner wanted a ready-made installer for each merge without building it by hand. An artifact needs no release process, version bump or write permission, and old builds expire on their own.
 - **Alternatives rejected:** a GitHub Release for every merge, which would be noisy at a fixed version; tagged releases, which can come later if versioned builds are needed; code signing, which costs money and isn't needed for one owner; Linux packages, which would ship untested builds (D11); an installer for every PR, which would add minutes per push; an installer for every commit in a push, which would mean several release builds per merge for commits nobody installs.
+
+### D17. Git workflow: a PR per feature or product area
+*2026-11-05 · Active · Supersedes D13*
+
+- **What:**
+  - Each large feature, separate product area or markedly different piece of work gets its own branch and PR. Smaller related changes can share one, as separate commits.
+  - Commits stay small, and each one builds and passes.
+  - The owner rebase-merges PRs. Merges, pushes and branch deletions need the owner's go-ahead.
+- **Why:** with one owner and no other contributors, a PR for every change costs more than it gives. Separate areas still get their own PR, so each can be reviewed, merged or reverted alone. Commits land on `main` as written, so each one should be reviewable, bisectable and revertable on its own.
+- **Alternatives rejected:** a branch per change (D13), which split closely related work, such as the install-on-pull hook and the CI installer, into separate PRs.
